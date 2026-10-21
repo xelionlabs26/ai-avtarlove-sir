@@ -49,6 +49,7 @@
 
   // Light wording for the video prompt's look paragraph.
   const LIGHT_LOOKS = {
+    soft: "soft, even, slightly cool studio light from the front, gentle shadows",
     warm: "warm cinematic lighting with amber and chocolate-brown tones, soft shadows",
     day: "soft natural daylight with gentle, even shadows",
     moody: "low-key cinematic lighting from warm practical lamps, deep soft shadows",
@@ -134,6 +135,11 @@
   const FORMATS = {
     vertical: { label: "Vertical 9:16", hint: "Reels, Shorts", aspect: "9:16" },
     landscape: { label: "Landscape 16:9", hint: "YouTube", aspect: "16:9" },
+  };
+
+  const CAMERAS = {
+    still: { label: "Still", hint: "One fixed angle" },
+    cuts: { label: "Three cuts", hint: "Wide, medium, close" },
   };
 
   const QUALITIES = {
@@ -238,6 +244,7 @@
 
     provider: "kie", // "kie" | "fal"
     quality: "720p",
+    camera: "still",
     customPrompt: null,
     videoJob: null,
     result: null,
@@ -245,7 +252,7 @@
 
   const saved = loadState();
   const state = Object.assign({}, DEFAULTS, saved);
-  const enums = [["speaker", SPEAKERS], ["look", LOOKS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES]];
+  const enums = [["speaker", SPEAKERS], ["look", LOOKS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES], ["camera", CAMERAS]];
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
@@ -685,37 +692,49 @@
       `Use @Audio1 exactly as provided, as the only audio track in the video. ${Who} lip-syncs precisely to @Audio1 throughout. ` +
       `Do not generate any new dialogue, voice, music, sound effects or ambience.`;
 
-    // 4. Performance.
-    const seat = sc.seat ? `the ${trim(sc.seat).replace(/^(a|an|the)\s+/i, "").replace(/\s+in the (centre|center).*$/i, "")} from @Image2` : "the chair from @Image2";
-    const p4 = `${Who} sits relaxed in ${seat} and speaks directly to the camera in a casual, confident podcast style` +
-      `${sc.microphone !== false ? `, with the boom-arm microphone positioned near ${sp.his} mouth` : ""}. ` +
-      `${sp.His} mouth movements, pauses and facial expressions follow the rhythm of the audio from @Audio1: a slight smirk at the start, ` +
-      `small natural hand gestures while talking, relaxed shoulders, natural blinking, and steady eye contact with the camera.`;
+    // 4. Performance, modelled on a calm, seated podcast answer.
+    const seatName = sc.seat ? `the ${trim(sc.seat).replace(/^(a|an|the)\s+/i, "").replace(/\s+in the (centre|center).*$/i, "")}` : "the chair";
+    const mic = sc.microphone !== false;
+    const p4 = `${Who} sits back in ${seatName} from @Image2, leaning back, relaxed and slightly slouched, knees apart and feet planted, ` +
+      `body turned a little toward ${mic ? `the microphone, which sits close to ${sp.his} mouth without covering ${sp.his} lips` : "the camera"}. ` +
+      `One forearm rests along the armrest${mic ? " by the microphone" : ""}; the other arm drapes over the far armrest with the hand hanging loosely over its front edge. ` +
+      `${Who} speaks in a calm, measured, serious conversational tone, as if answering an off-camera host, looking slightly to the side of the lens with only brief glances toward the camera. ` +
+      `${sp.His} mouth shapes every word clearly in sync with @Audio1. On key words ${sp.his} eyebrows lift, ${sp.his} head tilts or gives a slow nod, and the draped hand lifts a little with an open palm, then settles back. ` +
+      `Between phrases ${who} pauses with ${sp.his} mouth closed, blinks slowly and sometimes briefly closes ${sp.his} eyes in thought. ` +
+      `Movements stay small and natural: no big gestures, no exaggerated smiling.`;
 
     // 5. Look.
     const lightLook = (sc.light && LIGHT_LOOKS[sc.light]) || (sc.lighting ? `${trim(sc.lighting)}, soft shadows` : LIGHT_LOOKS.warm);
     const p5 = `The visuals feature ${lightLook}, natural skin texture, realistic fabric texture on the outfit, and a photorealistic authentic UGC creator look.`;
 
-    // 6. Cuts, fitted to the recording.
+    // 6. Camera: one fixed angle, or cuts fitted to the recording.
     let shots;
-    if (points.length === 3) {
+    let p7;
+    if (state.camera !== "cuts") {
+      shots = [
+        `Camera: one continuous shot from a locked-off tripod camera, framed as in @Image2: medium shot at seated chest height, straight on, from the knees to just above the head. ` +
+        `The camera never moves: no cuts, no zoom, no pan, no tilt, no shake. Only ${who} moves.`,
+      ];
+      p7 = `${Who}'s face, outfit, lighting and scene stay identical throughout.`;
+    } else if (points.length === 3) {
       const [, a, D] = points;
       shots = [
         `Use two hard cuts:`,
         `[0–${a}s] Medium-wide shot, eye-level, straight-on: ${who} seated in the chair, with the set softly behind.`,
-        `[${a}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, intense eye contact, ending on a small confident smile.`,
+        `[${a}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, ending on a calm, assured expression.`,
       ];
+      p7 = `${Who}'s face, outfit, lighting and scene stay identical across both cuts.`;
     } else {
       const [, a, b, D] = points;
       shots = [
         `Use three hard cuts:`,
         `[0–${a}s] Wide full shot, eye-level, straight-on: full body visible seated in the chair, with the floor, the furniture and the whole set in frame.`,
-        `[${a}–${b}s] Hard cut to a medium close-up from mid-torso up, slightly angled from the side, eye-level to slightly low angle${sc.microphone !== false ? ", with the microphone and boom arm prominent in the foreground" : ""}.`,
-        `[${b}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, intense eye contact, ending on a small confident smile.`,
+        `[${a}–${b}s] Hard cut to a medium close-up from mid-torso up, slightly angled from the side, eye-level to slightly low angle${mic ? ", with the microphone and boom arm prominent in the foreground" : ""}.`,
+        `[${b}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, ending on a calm, assured expression.`,
       ];
+      p7 = `${Who}'s face, outfit, lighting and scene stay identical across all three cuts.`;
     }
 
-    const p7 = `${Who}'s face, outfit, lighting and scene stay identical across all ${points.length - 1 === 2 ? "two" : "three"} cuts.`;
     const p8 = "Audio includes only the original audio from @Audio1. No background music, no sound effects, no added ambience, no subtitles, no on-screen text.";
     return [p1, p2, p3, p4, p5, shots.join("\n"), p7, p8].join("\n\n");
   }
@@ -1530,6 +1549,7 @@
 
     // ---- Step 4: episode ----
     updateChips("chips-quality", state.quality, Boolean(busy.video));
+    updateChips("chips-camera", state.camera, Boolean(busy.video));
     const ch = characterDetails();
     const sc = sceneDetails();
     const D = clipDuration();
@@ -1562,7 +1582,7 @@
       ? { text: "Waiting for the recording", stateClass: busy.audio ? "is-busy" : "is-wait" }
       : pending.transcript
         ? { text: "Listening for natural pauses…", stateClass: "is-busy" }
-        : { text: `${D || "?"}s clip, cuts at ${cutText}${cuts.snapped ? ", on natural pauses" : ""}`, stateClass: "is-done" });
+        : { text: state.camera === "cuts" ? `${D || "?"}s clip, cuts at ${cutText}${cuts.snapped ? ", on natural pauses" : ""}` : `${D || "?"}s clip, one still camera`, stateClass: "is-done" });
 
     $("fact-length").textContent = D ? `${D} seconds` : "Follows the recording";
     $("fact-format").textContent = ASPECTS[state.backgroundAspect || FORMATS[state.format].aspect];
@@ -1699,6 +1719,7 @@
     buildChips("chips-framing", FRAMINGS, "framing");
     buildChips("chips-format", FORMATS, "format");
     buildChips("chips-quality", QUALITIES, "quality");
+    buildChips("chips-camera", CAMERAS, "camera");
 
     for (const tab of document.querySelectorAll(".segmented button")) {
       tab.addEventListener("click", () => {
