@@ -14,6 +14,8 @@ const MODELS = {
   image: process.env.NANO_BANANA_MODEL || "fal-ai/nano-banana-pro",
   imageEdit: process.env.NANO_BANANA_EDIT_MODEL || "fal-ai/nano-banana-pro/edit",
   video: process.env.SEEDANCE_MODEL || "bytedance/seedance-2.5/reference-to-video",
+  vision: process.env.VISION_ENDPOINT || "openrouter/router/vision",
+  transcribe: process.env.WHISPER_MODEL || "fal-ai/whisper",
 };
 
 if (FAL_KEY) {
@@ -119,6 +121,6 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`AI Avatar Studio running at http://localhost:${PORT}`);
-  console.log(`Models: image=${MODELS.image} | edit=${MODELS.imageEdit} | video=${MODELS.video}`);
+  console.log(`Architect Podcast Studio running at http://localhost:${PORT}`);
+  console.log(`Models: ${Object.entries(MODELS).map(([k, v]) => `${k}=${v}`).join(" | ")}`);
 });

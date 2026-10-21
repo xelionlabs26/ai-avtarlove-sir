@@ -1,7 +1,7 @@
 {
-  "name": "ai-avatar-studio",
+  "name": "architect-podcast-studio",
   "version": "1.0.0",
-  "description": "Simple UI to turn a selfie, a podcast background and a short audio clip into a lip-synced AI avatar video (Nano Banana Pro + Seedance 2.5 on fal.ai).",
+  "description": "Turn a selfie and a short voice recording into a lip-synced podcast clip for an architecture podcast.",
   "private": true,
   "type": "module",
   "main": "server/index.js",

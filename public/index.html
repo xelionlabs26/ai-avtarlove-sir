@@ -3,255 +3,270 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Avatar Studio</title>
+  <title>Architect Podcast Studio</title>
+  <meta name="description" content="Create a lip-synced podcast clip of the architect from a selfie, a studio set and a voice recording." />
+  <meta name="theme-color" content="#F4F3EE" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232B4C9B'/%3E%3Cpath d='M10 24V15a6 6 0 0 1 12 0v9M7 24h18' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <span class="brand-bar"></span>
-      <span>AI AVATAR STUDIO</span>
-    </div>
-    <div class="key-box">
-      <button id="key-status" class="pill pill-muted" type="button">Checking API key…</button>
-      <button class="btn btn-small btn-ghost" id="btn-key" type="button" hidden>API key</button>
+    <div class="topbar-inner">
+      <a class="brand" href="#top">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="8" fill="currentColor" />
+          <path d="M10 24V15a6 6 0 0 1 12 0v9M7 24h18" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" />
+        </svg>
+        <span class="brand-text"><strong>Architect Podcast Studio</strong><small>AI episode clips</small></span>
+      </a>
+      <button id="key-status" class="key-pill" type="button">Checking…</button>
     </div>
   </header>
 
-  <section class="key-panel" id="key-panel" hidden>
+  <section class="key-panel" id="key-panel" hidden aria-labelledby="key-title">
     <div class="key-inner">
-      <label class="label" for="input-key">fal.ai API key</label>
-      <div class="key-row">
-        <input type="password" id="input-key" placeholder="Paste your fal.ai key" autocomplete="off" spellcheck="false" />
-        <button class="btn btn-primary" id="btn-save-key" type="button">Save</button>
-        <button class="btn btn-ghost" id="btn-forget-key" type="button">Forget</button>
+      <div>
+        <h2 id="key-title">Connect your fal.ai account</h2>
+        <p class="muted">Paste your fal.ai API key once. It stays in this browser and is only sent to fal.ai.
+          <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">Get a key</a></p>
       </div>
-      <p class="muted">Your key is stored only in this browser and is sent only to fal.ai. Get one at <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">fal.ai/dashboard/keys</a>. Generations are billed to that key.</p>
-      <p class="status" id="status-key"></p>
+      <div class="key-row">
+        <input type="password" id="input-key" placeholder="Paste your fal.ai key" autocomplete="off" spellcheck="false" aria-label="fal.ai API key" />
+        <button class="btn btn-primary" id="btn-save-key" type="button">Save key</button>
+        <button class="btn btn-quiet" id="btn-forget-key" type="button">Remove</button>
+        <button class="btn btn-quiet" id="btn-close-key" type="button">Close</button>
+      </div>
+      <p class="status" id="status-key" role="status"></p>
     </div>
   </section>
 
-  <main class="container">
+  <main class="container" id="top">
     <section class="hero">
-      <p class="eyebrow">AI AVATAR</p>
-      <h1>Your voice, your AI character,<br />a 30-second podcast video.</h1>
-      <p class="sub">Three steps. Character sheet and background with <strong>Nano Banana Pro</strong>, lip-synced video with <strong>Seedance 2.5</strong>, all through your fal.ai key.</p>
+      <p class="eyebrow">Podcast clip maker</p>
+      <h1>A selfie and a voice note in.<br />A podcast clip out.</h1>
+      <p class="lede">Add a photo of the architect and a short recording. The character sheet, studio set, video prompt and camera cuts are prepared for you.</p>
     </section>
 
-    <!-- ================= STEP 1 / 2 / 3 : INPUTS ================= -->
-    <section class="steps">
+    <nav class="stepper" aria-label="Progress">
+      <ol>
+        <li data-step="character"><a href="#step-character"><span class="step-dot">1</span><span class="step-text"><b>Architect</b><small></small></span></a></li>
+        <li data-step="set"><a href="#step-set"><span class="step-dot">2</span><span class="step-text"><b>Studio set</b><small></small></span></a></li>
+        <li data-step="voice"><a href="#step-voice"><span class="step-dot">3</span><span class="step-text"><b>Voice</b><small></small></span></a></li>
+        <li data-step="episode"><a href="#step-episode"><span class="step-dot">4</span><span class="step-text"><b>Episode clip</b><small></small></span></a></li>
+      </ol>
+    </nav>
 
-      <!-- STEP 1: CHARACTER -->
-      <article class="card" id="card-character">
-        <div class="card-head">
-          <span class="step-num">1</span>
+    <div class="grid-3">
+      <!-- ============ 1. ARCHITECT ============ -->
+      <section class="card" id="step-character" aria-labelledby="h-character">
+        <header class="card-head">
+          <span class="num">1</span>
           <div>
-            <h2>Character sheet</h2>
-            <p class="muted">Face on the left, outfit on the right. Becomes <code>@Image1</code>.</p>
+            <h2 id="h-character">The architect</h2>
+            <p class="muted">A clear, front-facing selfie. It becomes a character sheet with the face on the left and the outfit on the right.</p>
           </div>
+        </header>
+
+        <div class="field">
+          <span class="field-label" id="lbl-look">Look</span>
+          <div class="chips" id="chips-look" role="radiogroup" aria-labelledby="lbl-look"></div>
         </div>
 
-        <div class="tile" id="tile-character">
-          <span class="tag">@Image1</span>
-          <img id="img-character" alt="" hidden />
-          <div class="tile-empty" id="empty-character">No character sheet yet</div>
+        <div class="media media-wide" id="media-character">
+          <img id="img-character" alt="Character sheet" hidden />
+          <div class="dropzone" id="drop-selfie" role="button" tabindex="0" aria-label="Upload a selfie">
+            <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0-4 4m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <strong>Drop a selfie here</strong>
+            <span>or click to choose · JPG, PNG or WebP</span>
+          </div>
+          <div class="busy" id="busy-character" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
         </div>
 
-        <div class="tabs" data-tabs="character">
-          <button class="tab active" data-tab="generate">Generate</button>
-          <button class="tab" data-tab="upload">Upload sheet</button>
+        <div class="actions">
+          <button class="btn btn-primary" id="btn-character" type="button" hidden>Create character sheet</button>
+          <button class="btn" id="btn-change-selfie" type="button" hidden>Change selfie</button>
+          <button class="btn btn-quiet" id="btn-own-character" type="button">Upload a ready sheet</button>
         </div>
+        <p class="status" id="status-character" role="status"></p>
+        <input type="file" id="file-selfie" accept="image/*" hidden />
+        <input type="file" id="file-character" accept="image/*" hidden />
+      </section>
 
-        <div class="tab-panel" data-panel="character-generate">
-          <label class="file-row">
-            <span class="btn btn-ghost">Choose selfie</span>
-            <input type="file" id="file-selfie" accept="image/*" hidden />
-            <span class="file-name" id="name-selfie">One clear selfie</span>
-          </label>
-          <img id="img-selfie" class="thumb" alt="" hidden />
-          <label class="label" for="prompt-character">Character prompt</label>
-          <textarea id="prompt-character" rows="7"></textarea>
-          <button class="btn btn-primary" id="btn-gen-character">Generate character sheet</button>
-        </div>
-
-        <div class="tab-panel" data-panel="character-upload" hidden>
-          <label class="file-row">
-            <span class="btn btn-ghost">Choose image</span>
-            <input type="file" id="file-character" accept="image/*" hidden />
-            <span class="file-name">Upload a ready character sheet (16:9)</span>
-          </label>
-        </div>
-
-        <p class="status" id="status-character"></p>
-      </article>
-
-      <!-- STEP 2: BACKGROUND -->
-      <article class="card" id="card-background">
-        <div class="card-head">
-          <span class="step-num">2</span>
+      <!-- ============ 2. STUDIO SET ============ -->
+      <section class="card" id="step-set" aria-labelledby="h-set">
+        <header class="card-head">
+          <span class="num">2</span>
           <div>
-            <h2>Background</h2>
-            <p class="muted">Empty podcast studio, chair empty. Becomes <code>@Image2</code>.</p>
+            <h2 id="h-set">Studio set</h2>
+            <p class="muted">An empty podcast set with the chair free. It is created for you when you add the selfie, or you can upload your own.</p>
           </div>
+        </header>
+
+        <div class="field">
+          <span class="field-label" id="lbl-set">Style</span>
+          <div class="chips" id="chips-set" role="radiogroup" aria-labelledby="lbl-set"></div>
+        </div>
+        <div class="field">
+          <span class="field-label" id="lbl-format">Format</span>
+          <div class="chips chips-2" id="chips-format" role="radiogroup" aria-labelledby="lbl-format"></div>
         </div>
 
-        <div class="tile tile-portrait" id="tile-background">
-          <span class="tag">@Image2</span>
-          <img id="img-background" alt="" hidden />
-          <div class="tile-empty" id="empty-background">No background yet</div>
+        <div class="media media-tall" id="media-set">
+          <img id="img-set" alt="Studio set" hidden />
+          <div class="dropzone dropzone-soft" id="drop-set" role="button" tabindex="0" aria-label="Upload your own studio set image">
+            <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <strong>Your studio set appears here</strong>
+            <span>Create one below, or drop your own image</span>
+          </div>
+          <div class="busy" id="busy-set" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
         </div>
 
-        <div class="tabs" data-tabs="background">
-          <button class="tab active" data-tab="generate">Generate</button>
-          <button class="tab" data-tab="upload">Upload</button>
+        <div class="actions">
+          <button class="btn btn-primary" id="btn-set" type="button">Create studio set</button>
+          <button class="btn btn-quiet" id="btn-own-set" type="button">Upload my own</button>
         </div>
+        <p class="status" id="status-set" role="status"></p>
+        <input type="file" id="file-set" accept="image/*" hidden />
+      </section>
 
-        <div class="tab-panel" data-panel="background-generate">
-          <label class="label" for="prompt-background">Background prompt</label>
-          <textarea id="prompt-background" rows="7"></textarea>
-          <button class="btn btn-primary" id="btn-gen-background">Generate background</button>
-        </div>
-
-        <div class="tab-panel" data-panel="background-upload" hidden>
-          <label class="file-row">
-            <span class="btn btn-ghost">Choose image</span>
-            <input type="file" id="file-background" accept="image/*" hidden />
-            <span class="file-name">Upload a 9:16 studio image</span>
-          </label>
-        </div>
-
-        <p class="status" id="status-background"></p>
-      </article>
-
-      <!-- STEP 3: AUDIO -->
-      <article class="card" id="card-audio">
-        <div class="card-head">
-          <span class="step-num">3</span>
+      <!-- ============ 3. VOICE ============ -->
+      <section class="card" id="step-voice" aria-labelledby="h-voice">
+        <header class="card-head">
+          <span class="num">3</span>
           <div>
-            <h2>Your audio</h2>
-            <p class="muted">Your dialogue as an MP4, max 30 s. Becomes <code>@Video1</code>.</p>
+            <h2 id="h-voice">Voice</h2>
+            <p class="muted">The architect's own voice as an MP4, up to 30 seconds. The video follows it word for word.</p>
           </div>
-        </div>
+        </header>
 
-        <div class="tile tile-audio" id="tile-audio">
-          <span class="tag">@Video1</span>
-          <div class="wave" id="wave" hidden>
-            <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        <div class="media media-voice" id="media-voice">
+          <div class="dropzone" id="drop-voice" role="button" tabindex="0" aria-label="Upload the voice recording as MP4">
+            <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm7 9a7 7 0 0 1-14 0m7 7v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <strong>Drop the recording here</strong>
+            <span>MP4 only · 2 to 30 seconds</span>
           </div>
-          <div class="audio-meta" id="audio-meta" hidden></div>
-          <div class="tile-empty" id="empty-audio">No audio yet</div>
+          <div class="voice" id="voice-panel" hidden>
+            <div class="voice-top">
+              <span class="voice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span>
+              <div class="voice-info"><b id="voice-name"></b><small id="voice-meta"></small></div>
+            </div>
+            <audio id="voice-audio" controls preload="none"></audio>
+            <p class="voice-transcript" id="voice-transcript"></p>
+          </div>
+          <div class="busy" id="busy-voice" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
         </div>
 
         <ul class="tips">
-          <li>Speak your dialogue in your own voice, max 30 seconds.</li>
-          <li>Quiet room, no background music.</li>
-          <li>Save it as MP4. The voice is used as-is, visuals are ignored.</li>
+          <li>Record in a quiet room with the phone close to the mouth.</li>
+          <li>No background music. The voice is used exactly as recorded.</li>
+          <li>Camera cuts are timed to the recording automatically.</li>
         </ul>
 
-        <label class="file-row">
-          <span class="btn btn-ghost">Choose MP4</span>
-          <input type="file" id="file-audio" accept=".mp4,video/mp4" hidden />
-          <span class="file-name" id="name-audio">audio.mp4</span>
-        </label>
-        <video id="probe-audio" hidden preload="metadata"></video>
-        <p class="status" id="status-audio"></p>
-      </article>
-    </section>
+        <div class="actions">
+          <button class="btn" id="btn-change-voice" type="button" hidden>Replace recording</button>
+        </div>
+        <p class="status" id="status-voice" role="status"></p>
+        <input type="file" id="file-voice" accept=".mp4,video/mp4,audio/mp4" hidden />
+      </section>
+    </div>
 
-    <!-- ================= STEP 4 : VIDEO ================= -->
-    <section class="card card-wide" id="card-video">
-      <div class="card-head">
-        <span class="step-num">4</span>
+    <!-- ============ 4. EPISODE ============ -->
+    <section class="card card-wide" id="step-episode" aria-labelledby="h-episode">
+      <header class="card-head">
+        <span class="num">4</span>
         <div>
-          <h2>Generate your video</h2>
-          <p class="muted">Seedance 2.5 reference-to-video. Order matters: <code>@Image1</code> character, <code>@Image2</code> background, <code>@Video1</code> audio.</p>
+          <h2 id="h-episode">Episode clip</h2>
+          <p class="muted">The prompt, clip length and camera cuts are written automatically from steps 1 to 3.</p>
+        </div>
+      </header>
+
+      <div class="episode">
+        <ul class="ingredients">
+          <li id="ing-character">
+            <span class="ing-thumb"><img alt="" hidden /></span>
+            <span class="ing-text"><b>Character</b><small></small></span>
+            <span class="ing-state" aria-hidden="true"></span>
+          </li>
+          <li id="ing-set">
+            <span class="ing-thumb"><img alt="" hidden /></span>
+            <span class="ing-text"><b>Studio set</b><small></small></span>
+            <span class="ing-state" aria-hidden="true"></span>
+          </li>
+          <li id="ing-voice">
+            <span class="ing-thumb ing-thumb-voice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span>
+            <span class="ing-text"><b>Voice and camera cuts</b><small></small></span>
+            <span class="ing-state" aria-hidden="true"></span>
+          </li>
+        </ul>
+
+        <div class="episode-side">
+          <div class="field">
+            <span class="field-label" id="lbl-quality">Quality</span>
+            <div class="chips chips-3" id="chips-quality" role="radiogroup" aria-labelledby="lbl-quality"></div>
+          </div>
+          <dl class="clip-facts">
+            <div><dt>Length</dt><dd id="fact-length">–</dd></div>
+            <div><dt>Format</dt><dd id="fact-format">–</dd></div>
+          </dl>
+          <button class="btn btn-primary btn-xl" id="btn-episode" type="button" disabled>Create episode clip</button>
+          <p class="hint" id="hint-episode"></p>
         </div>
       </div>
 
-      <div class="ref-strip">
-        <div class="ref" id="ref-character"><span class="tag">@Image1</span><img alt="" hidden /><span class="ref-label">Character</span></div>
-        <div class="ref" id="ref-background"><span class="tag">@Image2</span><img alt="" hidden /><span class="ref-label">Background</span></div>
-        <div class="ref" id="ref-audio"><span class="tag">@Video1</span><span class="ref-audio">♪</span><span class="ref-label">Your audio</span></div>
+      <div class="progress" id="progress-video" hidden aria-live="polite">
+        <div class="progress-head">
+          <span class="spinner" aria-hidden="true"></span>
+          <b id="progress-title">Preparing…</b>
+          <span class="progress-time" id="progress-time"></span>
+        </div>
+        <ol class="progress-steps">
+          <li data-stage="prompt">Prompt</li>
+          <li data-stage="queue">Queue</li>
+          <li data-stage="render">Generating</li>
+          <li data-stage="done">Done</li>
+        </ol>
+        <p class="hint">This usually takes a few minutes. If you reload the page, it reconnects to the same job.</p>
       </div>
+      <p class="status" id="status-video" role="status"></p>
 
-      <div class="prompt-head">
-        <label class="label" for="prompt-video">Prompt</label>
+      <details class="prompt-box" id="prompt-box">
+        <summary><span>Video prompt</span><span class="pill pill-auto" id="prompt-mode">Written automatically</span></summary>
+        <textarea id="prompt-video" rows="14" readonly spellcheck="false" aria-label="Video prompt"></textarea>
         <div class="prompt-actions">
-          <button class="btn btn-small" id="btn-fit-timings" title="Rewrite the [0-10s] / [10-20s] / [20-30s] cut markers to match the audio length">Fit timings to audio</button>
-          <button class="btn btn-small" id="btn-reset-prompt">Reset prompt</button>
+          <button class="btn btn-small" id="btn-customise" type="button">Customise</button>
+          <button class="btn btn-small" id="btn-auto" type="button" hidden>Back to automatic</button>
+          <button class="btn btn-small btn-quiet" id="btn-reread" type="button" hidden>Read the inputs again</button>
+          <button class="btn btn-small btn-quiet" id="btn-copy" type="button">Copy</button>
         </div>
-      </div>
-      <textarea id="prompt-video" rows="16"></textarea>
-      <p class="note"><strong>Note:</strong> if your audio is shorter than 30 seconds, adjust the timings to match. For 8 seconds use [0-3s], [3-6s], [6-8s]. “Fit timings to audio” does this for you.</p>
-
-      <div class="settings">
-        <label>Duration
-          <select id="opt-duration"></select>
-        </label>
-        <label>Aspect ratio
-          <select id="opt-aspect">
-            <option value="9:16" selected>9:16 (vertical)</option>
-            <option value="16:9">16:9</option>
-            <option value="1:1">1:1</option>
-            <option value="4:3">4:3</option>
-            <option value="3:4">3:4</option>
-            <option value="21:9">21:9</option>
-            <option value="auto">auto</option>
-          </select>
-        </label>
-        <label>Resolution
-          <select id="opt-resolution">
-            <option value="480p">480p</option>
-            <option value="720p" selected>720p</option>
-            <option value="1080p">1080p</option>
-          </select>
-        </label>
-        <label>Model audio
-          <select id="opt-generate-audio">
-            <option value="">Model default</option>
-            <option value="true">On</option>
-            <option value="false">Off</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="generate-row">
-        <span class="muted" id="gen-left">—</span>
-        <button class="btn btn-primary btn-generate" id="btn-gen-video">Generate</button>
-        <span class="muted" id="gen-right">9:16</span>
-      </div>
-
-      <div class="progress" id="progress-video" hidden>
-        <div class="spinner"></div>
-        <div>
-          <div class="progress-title" id="progress-title">Submitting…</div>
-          <pre class="logs" id="progress-logs"></pre>
-        </div>
-      </div>
-      <p class="status" id="status-video"></p>
+      </details>
     </section>
 
-    <!-- ================= RESULT ================= -->
-    <section class="card card-wide" id="card-result" hidden>
-      <div class="card-head">
-        <span class="step-num">✓</span>
+    <!-- ============ RESULT ============ -->
+    <section class="card card-wide" id="step-result" hidden aria-labelledby="h-result">
+      <header class="card-head">
+        <span class="num num-done" aria-hidden="true">✓</span>
         <div>
-          <h2>Your video</h2>
+          <h2 id="h-result">Your episode clip</h2>
           <p class="muted" id="result-meta"></p>
         </div>
-      </div>
+      </header>
       <div class="result">
-        <video id="video-result" controls playsinline></video>
-        <div class="result-actions">
-          <a class="btn btn-primary" id="link-download" download="ai-avatar.mp4" href="#">Download MP4</a>
-          <button class="btn btn-ghost" id="btn-clear-result">Clear</button>
+        <video id="video-result" controls playsinline preload="metadata"></video>
+        <div class="result-side">
+          <button class="btn btn-primary" id="btn-download" type="button">Download MP4</button>
+          <button class="btn" id="btn-retake" type="button">Create another take</button>
+          <a class="btn btn-quiet" id="link-open" target="_blank" rel="noopener" href="#">Open in a new tab</a>
+          <p class="hint">Another take uses the same inputs and prompt and gives a new variation.</p>
         </div>
       </div>
     </section>
 
     <footer class="foot">
-      <span>Workflow adapted from the AI Avatar Prompt Guide by Tushar (@tusharx.ai)</span>
-      <button class="btn btn-small btn-ghost" id="btn-reset-all">Reset everything</button>
+      <span>Your files and key stay in this browser until you start over.</span>
+      <button class="btn btn-small btn-quiet" id="btn-reset" type="button">Start over</button>
     </footer>
   </main>
 

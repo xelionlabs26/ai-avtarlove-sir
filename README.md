@@ -1,67 +1,70 @@
-# AI Avatar Studio
+# Architect Podcast Studio
 
-A small web app that turns **one selfie + a podcast background + a short audio clip** into a lip-synced,
-30-second "podcast style" AI avatar video. It follows the 3-step workflow from the
-*AI Avatar Prompt Guide* by Tushar (@tusharx.ai):
+A small web app that turns **a selfie and a short voice recording** into a lip-synced podcast clip,
+set in an architect's studio. Everything between the two uploads is automatic.
 
-| Step | What happens | Model (fal.ai) |
+## How it works
+
+| Step | What the user does | What the app does automatically |
 | --- | --- | --- |
-| 1. Character | Upload a selfie → generate a 16:9 character sheet (face left, outfit right), or upload a ready sheet | `fal-ai/nano-banana-pro/edit` |
-| 2. Background | Generate an empty podcast studio (9:16), or upload your own | `fal-ai/nano-banana-pro` |
-| 3. Audio | Upload your dialogue as an **MP4** (max 30 s) | – |
-| 4. Video | Paste/adjust the prompt, pick duration / aspect / resolution, hit **Generate** | `bytedance/seedance-2.5/reference-to-video` |
+| 1. Architect | Drops a selfie and picks a look (or keeps the default) | Creates a 16:9 character sheet (face left, outfit right), then reads the face and outfit from it |
+| 2. Studio set | Nothing (or picks a style, format, or uploads their own set) | Creates an empty podcast set as soon as the selfie arrives, then reads the seat, props and light from it |
+| 3. Voice | Drops an MP4 recording, 2 to 30 seconds | Reads the exact length, transcribes it and finds the natural pauses |
+| 4. Episode clip | Clicks **Create episode clip** | Writes the video prompt from steps 1 to 3, sets the clip length to the recording, places the camera cuts on pauses, and generates the video |
 
-The files are passed to Seedance in this exact order so the prompt tags line up:
-`@Image1` = character sheet, `@Image2` = background, `@Video1` = your audio.
+The video prompt is rebuilt every time an input changes. It can be viewed, and optionally customised, under
+**Video prompt** in step 4.
+
+### Presets
+
+- **Looks:** Indo-western (Nehru jacket over kurta), Studio linen, Handloom khadi, or "As in photo".
+- **Set styles:** Design studio, Courtyard verandah, Concrete & light.
+- **Formats:** Vertical 9:16 (Reels, Shorts) or Landscape 16:9 (YouTube, LinkedIn). An uploaded set keeps its own shape.
+- **Quality:** 480p, 720p or 1080p.
+
+All presets and prompts live at the top of `public/app.js`.
+
+### Models (all through one fal.ai key)
+
+| Job | fal.ai endpoint |
+| --- | --- |
+| Character sheet | `fal-ai/nano-banana-pro/edit` |
+| Studio set | `fal-ai/nano-banana-pro` |
+| Reading the sheet and the set | `openrouter/router/vision` |
+| Transcribing the recording | `fal-ai/whisper` |
+| Video | `bytedance/seedance-2.5/reference-to-video` |
+
+The files reach the video model in a fixed order, so the prompt tags always line up:
+`@Image1` = character sheet, `@Image2` = studio set, `@Video1` = the recording.
 
 ## Use it on GitHub Pages (no install)
 
-Once Pages is switched on, the app lives at:
+Once Pages is switched on, the app lives at `https://<github-account>.github.io/<repository>/`.
 
-**https://xelionlabs26.github.io/ai-avtarlove-sir/**
-
-On first visit it asks for your fal.ai API key. The key is kept only in your browser (localStorage) and is sent only
-to fal.ai, so every visitor uses and pays with their own key. Click **API key → Forget** to remove it.
+On first visit it asks for a fal.ai API key. The key is kept only in that browser and is sent only to fal.ai,
+so every visitor uses their own key. Click the key button at the top right to change or remove it.
 
 One-time setup in the repo:
 
 1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-2. Push to `main` (or the current default branch) or run the **Deploy to GitHub Pages** workflow from the Actions tab.
+2. Run the **Deploy to GitHub Pages** workflow from the Actions tab, or push a change to `public/`.
    The workflow in `.github/workflows/pages.yml` publishes the `public/` folder.
 
-GitHub Pages on a **private** repo needs a paid GitHub plan. On the free plan, make the repo public first.
-
-## Run it locally with the key on a server
+## Run it locally (optional)
 
 ```bash
 npm install
-cp .env.example .env        # then put your fal.ai key in FAL_KEY=
+cp .env.example .env        # optional: put a fal.ai key in FAL_KEY=
 npm start                   # http://localhost:3000
 ```
 
-With `FAL_KEY` set, the key only lives on the server (`server/index.js`) and the page skips the key prompt. The browser talks to three small routes:
-
-- `POST /api/upload` – uploads a file to fal storage and returns its URL
-- `POST /api/jobs` – submits a job (`image`, `imageEdit` or `video`) to the fal queue
-- `GET /api/jobs/:kind/:id` – polls status / logs / result
-
-## Prompts
-
-All three default prompts (character sheet, background, video) are pre-filled from the guide and fully editable in the UI.
-When you upload audio shorter than 30 s, the `[0-10s] / [10-20s] / [20-30s]` cut markers are rewritten to match the
-clip length (for 8 s: `[0-3s]`, `[3-6s]`, `[6-8s]`). "Fit timings to audio" redoes that at any time.
-
-## Settings
-
-- **Duration** – defaults to the audio length (rounded up, 4–30 s); `auto` lets the model match the references.
-- **Aspect ratio** – 9:16 by default (vertical podcast clip).
-- **Resolution** – 480p / 720p / 1080p.
-- **Model audio** – leave on *Model default* unless Seedance adds unwanted sound; *Off* mutes generated audio.
-
-Model endpoints can be overridden in `.env` (`SEEDANCE_MODEL`, `NANO_BANANA_MODEL`, `NANO_BANANA_EDIT_MODEL`).
+With `FAL_KEY` set, the key stays on the server and the page never asks for one. Without it, the page asks
+for a key in the browser, exactly like the GitHub Pages version.
 
 ## Notes
 
-- Audio must be MP4 (the voice track is used, visuals are ignored). Keep it under 30 seconds, quiet room, no music.
-- Uploads, prompts and the last result are remembered in your browser (localStorage). "Reset everything" clears them.
-- Generation runs on your fal.ai account and is billed there.
+- The recording must be an MP4, 2 to 30 seconds, ideally in a quiet room with no music.
+- If an image cannot be read, the prompt falls back to the chosen preset's description. If the recording
+  cannot be transcribed, the cuts are spaced evenly.
+- An in-progress video job survives a page reload: the page reconnects to it.
+- Uploads, choices and the last clip are remembered in the browser. **Start over** clears them but keeps the key.
