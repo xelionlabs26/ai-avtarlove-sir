@@ -41,6 +41,19 @@
     photo: { label: "As in photo", hint: "Keep my clothes", outfit: null },
   };
 
+  const SPEAKERS = {
+    man: { label: "Man", hint: "he / his", noun: "man", he: "he", his: "his", He: "He", His: "His" },
+    woman: { label: "Woman", hint: "she / her", noun: "woman", he: "she", his: "her", He: "She", His: "Her" },
+    person: { label: "Person", hint: "they / their", noun: "person", he: "they", his: "their", He: "They", His: "Their" },
+  };
+
+  // Light wording for the video prompt's look paragraph.
+  const LIGHT_LOOKS = {
+    warm: "warm cinematic lighting with amber and chocolate-brown tones, soft shadows",
+    day: "soft natural daylight with gentle, even shadows",
+    moody: "low-key cinematic lighting from warm practical lamps, deep soft shadows",
+  };
+
   const SET_STYLES = {
     studio: {
       label: "Design studio",
@@ -173,6 +186,7 @@
 
   const DEFAULTS = {
     characterMode: "upload", // "upload" | "create"
+    speaker: "man",
     look: "indowestern",
     characterNotes: "",
     customCharacterPrompt: null,
@@ -211,7 +225,7 @@
 
   const saved = loadState();
   const state = Object.assign({}, DEFAULTS, saved);
-  const enums = [["look", LOOKS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES]];
+  const enums = [["speaker", SPEAKERS], ["look", LOOKS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES]];
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
@@ -612,48 +626,70 @@
     return planCuts(D, transcriptReady() ? state.transcript.chunks : null);
   }
 
+  /** Writes the Seedance prompt in the house template, filled from the inputs and fitted to the recording. */
   function composeVideoPrompt() {
     const ch = assetRef() ? { ...characterDetails(), layout: "photo" } : characterDetails();
     const sc = sceneDetails();
+    const sp = SPEAKERS[state.speaker] || SPEAKERS.man;
+    const who = `the ${sp.noun}`;
+    const Who = `The ${sp.noun}`;
     const { points } = currentCuts();
     const lang = transcriptReady() ? LANGUAGES[state.transcript.language] : null;
+    const facial = sp.noun === "man" && !/clean[- ]?shaven/i.test(ch.face || "") ? "beard" : "facial hair";
+    const trim = (t) => (t || "").replace(/[.\s]+$/, "");
 
-    const p1 =
-      ch.layout === "photo"
-        ? `@Image1 defines the architect: face, hair, skin tone and full outfit.${ch.face ? ` Face: ${ch.face}.` : ""}${ch.outfit ? ` Outfit: ${ch.outfit}.` : ""} Only this one person. Do not use the background of @Image1.`
-        : `@Image1 defines the architect's face, hair, facial hair, skin tone and full outfit.${ch.face ? ` Face: ${ch.face}.` : ""} Take the face from the left side of @Image1 and the outfit from the right side${ch.outfit ? `: ${ch.outfit}` : ""}. Only this one person. Do not use the white background of @Image1.`;
+    // 1. Who: face and outfit from the character sheet (or a verified portrait).
+    let p1;
+    if (ch.layout === "photo") {
+      p1 = `@Image1 defines ${who}'s face, hair, ${facial}, skin tone and full outfit${ch.outfit ? `: ${trim(ch.outfit)}` : ""}.` +
+        ` The output must contain only this one ${sp.noun}. Do not use the background of @Image1.`;
+    } else {
+      p1 = `@Image1 defines ${who}'s face, hair, ${facial}, skin tone and full outfit. Use the face from the left side of the image and the outfit from the right side` +
+        `${ch.outfit ? `: ${trim(ch.outfit)}` : ""}. The output must contain only this one ${sp.noun}. Do not use the white background of @Image1.`;
+    }
 
-    const p2 = `@Image2 defines the set${sc.setting ? `: ${sc.setting}` : ""}. Keep the layout, furniture, props and lighting exactly as in @Image2.`;
+    // 2. Where: the set.
+    const sceneText = trim(sc.scene || [sc.setting, sc.seat, sc.microphone ? "a black podcast microphone on a boom-arm stand" : null, sc.lighting].filter(Boolean).join(", "));
+    const p2 = `@Image2 defines the scene${sceneText ? `: ${sceneText}` : ""}. Keep the scene layout, furniture and lighting exactly as in @Image2.`;
 
-    const p3 =
-      `@Audio1 is the architect's voice. Use it exactly as provided as the only audio track, without changing the words, voice or timing. ` +
-      `The architect lip-syncs precisely to @Audio1${lang ? `, speaking ${lang}` : ""}. No new dialogue, voice-over, music or sound effects.`;
+    // 3. The voice.
+    const p3 = `@Audio1 defines only the audio: ${who}'s voice and complete dialogue${lang ? ` in ${lang}` : ""}. ` +
+      `Use @Audio1 exactly as provided, as the only audio track in the video. ${Who} lip-syncs precisely to @Audio1 throughout. ` +
+      `Do not generate any new dialogue, voice, music, sound effects or ambience.`;
 
-    const seat = sc.seat ? `sits relaxed in the ${stripArticle(sc.seat)}` : "sits relaxed at the centre of the set";
-    const p4 =
-      `The architect ${seat} and talks to camera in the calm, articulate and confident manner of a renowned architect on a podcast` +
-      `${sc.microphone ? ", microphone near the mouth" : ""}. ` +
-      `Measured, natural hand gestures that sketch forms and spaces in the air, natural blinking, steady eye contact. ` +
-      `${cap(sc.lighting || "soft natural light")}, real skin and fabric texture, photorealistic documentary look.`;
+    // 4. Performance.
+    const seat = sc.seat ? `the ${trim(sc.seat).replace(/^(a|an|the)\s+/i, "").replace(/\s+in the (centre|center).*$/i, "")} from @Image2` : "the chair from @Image2";
+    const p4 = `${Who} sits relaxed in ${seat} and speaks directly to the camera in a casual, confident podcast style` +
+      `${sc.microphone !== false ? `, with the boom-arm microphone positioned near ${sp.his} mouth` : ""}. ` +
+      `${sp.His} mouth movements, pauses and facial expressions follow the rhythm of the audio from @Audio1: a slight smirk at the start, ` +
+      `small natural hand gestures while talking, relaxed shoulders, natural blinking, and steady eye contact with the camera.`;
 
+    // 5. Look.
+    const lightLook = (sc.light && LIGHT_LOOKS[sc.light]) || (sc.lighting ? `${trim(sc.lighting)}, soft shadows` : LIGHT_LOOKS.warm);
+    const p5 = `The visuals feature ${lightLook}, natural skin texture, realistic fabric texture on the outfit, and a photorealistic authentic UGC creator look.`;
+
+    // 6. Cuts, fitted to the recording.
     let shots;
     if (points.length === 3) {
       const [, a, D] = points;
       shots = [
-        `[0-${a}s] Medium-wide shot${sc.seat ? ", seated" : ""}, the set softly behind.`,
-        `[${a}-${D}s] Hard cut to face close-up, ending on a small, assured smile.`,
+        `Use two hard cuts:`,
+        `[0–${a}s] Medium-wide shot, eye-level, straight-on: ${who} seated in the chair, with the set softly behind.`,
+        `[${a}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, intense eye contact, ending on a small confident smile.`,
       ];
     } else {
       const [, a, b, D] = points;
       shots = [
-        `[0-${a}s] Wide shot, full body${sc.seat ? " seated" : ""}, the whole set in frame.`,
-        `[${a}-${b}s] Hard cut to medium close-up${sc.microphone ? ", microphone in the foreground" : ""}, hands gesturing as the architect explains an idea.`,
-        `[${b}-${D}s] Hard cut to face close-up, ending on a small, assured smile.`,
+        `Use three hard cuts:`,
+        `[0–${a}s] Wide full shot, eye-level, straight-on: full body visible seated in the chair, with the floor, the furniture and the whole set in frame.`,
+        `[${a}–${b}s] Hard cut to a medium close-up from mid-torso up, slightly angled from the side, eye-level to slightly low angle${sc.microphone !== false ? ", with the microphone and boom arm prominent in the foreground" : ""}.`,
+        `[${b}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, intense eye contact, ending on a small confident smile.`,
       ];
     }
 
-    const p6 = "Face, outfit and set stay identical in all cuts. No subtitles, no captions, no on-screen text, no logos.";
-    return [p1, p2, p3, p4, shots.join("\n"), p6].join("\n\n");
+    const p7 = `${Who}'s face, outfit, lighting and scene stay identical across all ${points.length - 1 === 2 ? "two" : "three"} cuts.`;
+    const p8 = "Audio includes only the original audio from @Audio1. No background music, no sound effects, no added ambience, no subtitles, no on-screen text.";
+    return [p1, p2, p3, p4, p5, shots.join("\n"), p7, p8].join("\n\n");
   }
 
   // Prompt boxes: each is written automatically until the user chooses to edit it.
@@ -997,11 +1033,14 @@
     const fmt = FORMATS[state.format];
     const useRef = state.useReference;
     const prompt = promptFor("set");
+    const style = SET_STYLES[state.setStyle];
     const read = {
-      setting: SET_STYLES[state.setStyle].setting,
+      setting: style.setting,
+      scene: `${style.scene.replace(":", " with")}, ${chairName()} in the centre and a black podcast microphone on a boom-arm stand`,
       seat: `${chairName()} in the centre`,
       microphone: true,
       lighting: LIGHTS[state.light].short,
+      light: state.light,
     };
     setStatus("status-set", "");
     setBusy("background", useRef ? "Preparing the framing reference…" : "Creating the studio set…");
@@ -1391,6 +1430,7 @@
     renderTabs("characterMode", { upload: "panel-char-upload", create: "panel-char-create" });
     const createChar = state.characterMode === "create";
     updateChips("chips-look", state.look, Boolean(busy.character));
+    updateChips("chips-speaker", state.speaker, Boolean(busy.video));
     setImg($("img-selfie"), state.selfieUrl);
     $("selfie-empty").hidden = Boolean(state.selfieUrl);
     $("selfie-slot").classList.toggle("has-image", Boolean(state.selfieUrl));
@@ -1616,6 +1656,7 @@
   }
 
   function bindEvents() {
+    buildChips("chips-speaker", SPEAKERS, "speaker");
     buildChips("chips-look", LOOKS, "look");
     buildChips("chips-style", SET_STYLES, "setStyle");
     buildChips("chips-chair", CHAIRS, "chair");
