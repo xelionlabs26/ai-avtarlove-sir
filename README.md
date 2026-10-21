@@ -14,7 +14,24 @@ A small web app that turns **one selfie + a podcast background + a short audio c
 The files are passed to Seedance in this exact order so the prompt tags line up:
 `@Image1` = character sheet, `@Image2` = background, `@Video1` = your audio.
 
-## Run it
+## Use it on GitHub Pages (no install)
+
+Once Pages is switched on, the app lives at:
+
+**https://xelionlabs26.github.io/ai-avtarlove-sir/**
+
+On first visit it asks for your fal.ai API key. The key is kept only in your browser (localStorage) and is sent only
+to fal.ai, so every visitor uses and pays with their own key. Click **API key → Forget** to remove it.
+
+One-time setup in the repo:
+
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+2. Push to `main` (or the current default branch) or run the **Deploy to GitHub Pages** workflow from the Actions tab.
+   The workflow in `.github/workflows/pages.yml` publishes the `public/` folder.
+
+GitHub Pages on a **private** repo needs a paid GitHub plan. On the free plan, make the repo public first.
+
+## Run it locally with the key on a server
 
 ```bash
 npm install
@@ -22,7 +39,7 @@ cp .env.example .env        # then put your fal.ai key in FAL_KEY=
 npm start                   # http://localhost:3000
 ```
 
-Your fal key only lives on the server (`server/index.js`). The browser talks to three small routes:
+With `FAL_KEY` set, the key only lives on the server (`server/index.js`) and the page skips the key prompt. The browser talks to three small routes:
 
 - `POST /api/upload` – uploads a file to fal storage and returns its URL
 - `POST /api/jobs` – submits a job (`image`, `imageEdit` or `video`) to the fal queue

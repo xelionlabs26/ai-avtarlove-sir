@@ -12,8 +12,24 @@
       <span class="brand-bar"></span>
       <span>AI AVATAR STUDIO</span>
     </div>
-    <div id="key-status" class="pill pill-muted">Checking API key…</div>
+    <div class="key-box">
+      <button id="key-status" class="pill pill-muted" type="button">Checking API key…</button>
+      <button class="btn btn-small btn-ghost" id="btn-key" type="button" hidden>API key</button>
+    </div>
   </header>
+
+  <section class="key-panel" id="key-panel" hidden>
+    <div class="key-inner">
+      <label class="label" for="input-key">fal.ai API key</label>
+      <div class="key-row">
+        <input type="password" id="input-key" placeholder="Paste your fal.ai key" autocomplete="off" spellcheck="false" />
+        <button class="btn btn-primary" id="btn-save-key" type="button">Save</button>
+        <button class="btn btn-ghost" id="btn-forget-key" type="button">Forget</button>
+      </div>
+      <p class="muted">Your key is stored only in this browser and is sent only to fal.ai. Get one at <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">fal.ai/dashboard/keys</a>. Generations are billed to that key.</p>
+      <p class="status" id="status-key"></p>
+    </div>
+  </section>
 
   <main class="container">
     <section class="hero">

@@ -29,6 +29,20 @@
 
   const MAX_AUDIO_SECONDS = 30;
   const STORAGE_KEY = "ai-avatar-studio:v1";
+  const KEY_STORAGE = "ai-avatar-studio:fal-key";
+  const FAL_REST = "https://rest.fal.ai";
+  const FAL_QUEUE = "https://queue.fal.run";
+  const MAX_UPLOAD_BYTES = 90 * 1024 * 1024;
+
+  // Models used when the page talks to fal.ai directly (e.g. on GitHub Pages).
+  const DIRECT_MODELS = {
+    image: "fal-ai/nano-banana-pro",
+    imageEdit: "fal-ai/nano-banana-pro/edit",
+    video: "bytedance/seedance-2.5/reference-to-video",
+  };
+
+  // "server" = local Node server holds the key; "direct" = browser calls fal.ai with the visitor's key.
+  const backend = { mode: "direct", models: DIRECT_MODELS };
 
   // ---------------------------------------------------------------------------
   // State (persisted to localStorage so a refresh doesn't lose uploads)
@@ -83,6 +97,7 @@
     return `${s.toFixed(1)} s`;
   }
 
+  // --- server mode (local Node server) ---
   async function api(path, opts = {}) {
     const res = await fetch(path, opts);
     let body = null;
@@ -91,29 +106,118 @@
     return body;
   }
 
+  // --- direct mode (browser -> fal.ai) ---
+  function getKey() {
+    try { return (localStorage.getItem(KEY_STORAGE) || "").trim(); } catch { return ""; }
+  }
+
+  function falError(body) {
+    const d = body?.detail;
+    if (Array.isArray(d)) return d.map((x) => `${(x.loc || []).join(".")}: ${x.msg}`).join("; ");
+    if (d) return typeof d === "string" ? d : JSON.stringify(d);
+    return body?.message || body?.error || null;
+  }
+
+  async function falFetch(url, opts = {}) {
+    const key = getKey();
+    if (!key) {
+      openKeyPanel();
+      throw new Error("Add your fal.ai API key first (button at the top right).");
+    }
+    let res;
+    try {
+      res = await fetch(url, {
+        ...opts,
+        headers: { Authorization: `Key ${key}`, Accept: "application/json", ...(opts.headers || {}) },
+      });
+    } catch (err) {
+      throw new Error(`Could not reach fal.ai (${err.message}). Check your connection or browser extensions.`);
+    }
+    const text = await res.text();
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch { /* non-json */ }
+    if (res.status === 401 || res.status === 403) throw new Error("fal.ai rejected the API key. Check it under 'API key'.");
+    if (!res.ok) throw new Error(falError(body) || `${res.status} ${res.statusText}`);
+    return body;
+  }
+
+  function queueBase(endpoint) {
+    const [owner, alias] = endpoint.split("/");
+    return `${FAL_QUEUE}/${owner}/${alias}`;
+  }
+
+  // --- shared API used by the UI ---
   async function uploadFile(file, onProgress) {
     onProgress?.(`Uploading ${file.name}…`);
-    const fd = new FormData();
-    fd.append("file", file, file.name);
-    return api("/api/upload", { method: "POST", body: fd });
+    if (backend.mode === "server") {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      return api("/api/upload", { method: "POST", body: fd });
+    }
+    if (file.size > MAX_UPLOAD_BYTES) throw new Error("File is too large (max 90 MB).");
+    const contentType = file.type || "application/octet-stream";
+    const init = await falFetch(`${FAL_REST}/storage/upload/initiate?storage_type=fal-cdn-v3`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content_type: contentType, file_name: file.name || `upload-${Date.now()}` }),
+    });
+    const put = await fetch(init.upload_url, { method: "PUT", body: file, headers: { "Content-Type": contentType } });
+    if (!put.ok) throw new Error(`Upload failed (${put.status} ${put.statusText}).`);
+    return { url: init.file_url, name: file.name, size: file.size, type: contentType };
+  }
+
+  async function submitJob(kind, input) {
+    if (backend.mode === "server") {
+      const r = await api("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, input }),
+      });
+      return { kind, requestId: r.requestId };
+    }
+    const endpoint = backend.models[kind];
+    const r = await falFetch(`${FAL_QUEUE}/${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const base = queueBase(endpoint);
+    return {
+      kind,
+      requestId: r.request_id,
+      statusUrl: r.status_url || `${base}/requests/${r.request_id}/status`,
+      responseUrl: r.response_url || `${base}/requests/${r.request_id}`,
+    };
+  }
+
+  async function jobStatus(job) {
+    if (backend.mode === "server") return api(`/api/jobs/${job.kind}/${job.requestId}`);
+    const sep = job.statusUrl.includes("?") ? "&" : "?";
+    const s = await falFetch(`${job.statusUrl}${sep}logs=1`);
+    const out = {
+      status: s.status,
+      queuePosition: s.queue_position ?? null,
+      logs: (s.logs || []).map((l) => l.message),
+    };
+    if (s.status === "COMPLETED") out.result = await falFetch(job.responseUrl);
+    return out;
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /** Submit a job and poll until it completes. */
   async function runJob(kind, input, onUpdate) {
-    const { requestId } = await api("/api/jobs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, input }),
-    });
-    onUpdate?.({ status: "SUBMITTED", requestId, logs: [] });
+    const job = await submitJob(kind, input);
+    onUpdate?.({ status: "SUBMITTED", requestId: job.requestId, logs: [] });
     // eslint-disable-next-line no-constant-condition
     while (true) {
       await sleep(kind === "video" ? 3000 : 1500);
-      const s = await api(`/api/jobs/${kind}/${requestId}`);
+      const s = await jobStatus(job);
       onUpdate?.(s);
-      if (s.status === "COMPLETED") return s.result;
+      if (s.status === "COMPLETED") {
+        if (!s.result) throw new Error("Job finished without a result.");
+        return s.result;
+      }
     }
   }
 
@@ -456,24 +560,68 @@
   // ---------------------------------------------------------------------------
   // Boot
   // ---------------------------------------------------------------------------
-  async function checkHealth() {
-    const pill = $("key-status");
-    try {
-      const h = await api("/api/health");
-      if (h.hasKey) {
-        pill.textContent = "fal.ai key detected";
-        pill.className = "pill pill-ok";
-        pill.title = `image: ${h.models.image}\nedit: ${h.models.imageEdit}\nvideo: ${h.models.video}`;
-      } else {
-        pill.textContent = "FAL_KEY missing – add it to .env";
-        pill.className = "pill pill-bad";
-      }
-    } catch {
-      pill.textContent = "Server unreachable";
-      pill.className = "pill pill-bad";
-    }
+  function openKeyPanel() {
+    $("key-panel").hidden = false;
+    $("input-key").value = getKey();
+    $("input-key").focus();
   }
 
-  checkHealth();
+  function renderKeyStatus() {
+    const pill = $("key-status");
+    if (backend.mode === "server") {
+      pill.textContent = "Using server key";
+      pill.className = "pill pill-ok";
+      pill.title = `image: ${backend.models.image}\nedit: ${backend.models.imageEdit}\nvideo: ${backend.models.video}`;
+      $("btn-key").hidden = true;
+      return;
+    }
+    $("btn-key").hidden = false;
+    if (getKey()) {
+      pill.textContent = "fal.ai key saved";
+      pill.className = "pill pill-ok";
+    } else {
+      pill.textContent = "Add your fal.ai key";
+      pill.className = "pill pill-bad";
+    }
+    pill.title = "";
+  }
+
+  $("btn-key").addEventListener("click", () => {
+    const panel = $("key-panel");
+    if (panel.hidden) openKeyPanel(); else panel.hidden = true;
+  });
+  $("key-status").addEventListener("click", () => { if (backend.mode === "direct") openKeyPanel(); });
+
+  $("btn-save-key").addEventListener("click", () => {
+    const v = $("input-key").value.trim();
+    if (!v) return setStatus("status-key", "Paste a key first.", "error");
+    try { localStorage.setItem(KEY_STORAGE, v); } catch { /* ignore */ }
+    setStatus("status-key", "Saved in this browser.", "ok");
+    renderKeyStatus();
+    setTimeout(() => { $("key-panel").hidden = true; setStatus("status-key", ""); }, 700);
+  });
+  $("input-key").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btn-save-key").click(); });
+
+  $("btn-forget-key").addEventListener("click", () => {
+    try { localStorage.removeItem(KEY_STORAGE); } catch { /* ignore */ }
+    $("input-key").value = "";
+    setStatus("status-key", "Key removed from this browser.", "ok");
+    renderKeyStatus();
+  });
+
+  async function detectBackend() {
+    try {
+      const res = await fetch("/api/health", { headers: { Accept: "application/json" } });
+      const h = res.ok ? await res.json() : null;
+      if (h?.ok && h.hasKey) {
+        backend.mode = "server";
+        backend.models = h.models || DIRECT_MODELS;
+      }
+    } catch { /* static hosting: no server */ }
+    renderKeyStatus();
+    if (backend.mode === "direct" && !getKey()) openKeyPanel();
+  }
+
+  detectBackend();
   render();
 })();
