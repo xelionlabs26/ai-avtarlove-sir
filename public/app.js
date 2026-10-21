@@ -13,12 +13,15 @@
     video: "bytedance/seedance-2.5/reference-to-video",
     vision: "openrouter/router/vision",
     transcribe: "fal-ai/whisper",
+    audioConvert: "fal-ai/ffmpeg-api/merge-audios",
   };
 
   // Vision models that read the character sheet and the set, tried in order.
   const VISION_MODELS = ["google/gemini-2.5-flash", "openai/gpt-4o-mini"];
 
-  // Outfit presets for the character sheet.
+  // Image used as a camera-distance guide for generated sets (served next to this page).
+  const REFERENCE_PATH = "reference/podcast-set-framing.jpg";
+
   const LOOKS = {
     indowestern: {
       label: "Indo-western",
@@ -35,66 +38,69 @@
       hint: "Indigo khadi",
       outfit: "deep indigo handwoven khadi kurta, natural off-white cotton trousers, tan leather Kolhapuri sandals, simple silver wristwatch",
     },
-    photo: {
-      label: "As in photo",
-      hint: "Keep my clothes",
-      outfit: null,
-    },
+    photo: { label: "As in photo", hint: "Keep my clothes", outfit: null },
   };
 
-  // Podcast set presets. `read` is used for the video prompt if the image analysis is unavailable.
-  const SETS = {
+  const SET_STYLES = {
     studio: {
       label: "Design studio",
       hint: "Books, models, drafting table",
-      scene:
-        "an architect's design studio arranged as a podcast set. Floor-to-ceiling teak bookshelves with architecture monographs and small white massing models, " +
-        "a large drafting table with rolled drawings and a brass task lamp in the background, warm lime-plaster walls, a polished Kota stone floor with a handwoven cotton dhurrie. " +
-        "In the centre, an empty Chandigarh-style teak-and-cane lounge armchair, angled slightly toward the camera. " +
-        "A black podcast microphone on a boom-arm stand beside the chair, pointing at the seat. " +
-        "Soft late-afternoon daylight from tall windows, casting patterned jaali shadows on the wall.",
-      read: {
-        setting: "an architect's design studio with teak bookshelves, white massing models and a drafting table on a Kota stone floor",
-        seat: "teak-and-cane lounge armchair in the centre",
-        microphone: true,
-        lighting: "soft late-afternoon daylight with patterned jaali shadows",
-      },
+      chair: "cane",
+      scene: "an architect's design studio: floor-to-ceiling teak bookshelves with architecture monographs and small white massing models, a large drafting table with rolled drawings and a brass task lamp further back, warm lime-plaster walls, and a polished Kota stone floor with a handwoven cotton dhurrie rug",
+      setting: "an architect's design studio with teak bookshelves, white massing models and a drafting table on a Kota stone floor",
+    },
+    lounge: {
+      label: "Podcast lounge",
+      hint: "Curtains, lamp, plant",
+      chair: "boucle",
+      scene: "a cosy podcast studio: floor-to-ceiling velvet curtains in a deep warm brown, warm amber uplighting along the base of the curtains, a glowing fabric floor lamp, a tall palm plant in a dark ceramic pot, a low wooden side cabinet, and a wooden floor with a beige jute rug",
+      setting: "a cosy podcast studio with brown velvet curtains, a glowing floor lamp, a palm plant and a jute rug",
     },
     courtyard: {
       label: "Courtyard",
       hint: "Brick jaali, plants",
-      scene:
-        "a shaded verandah opening onto the courtyard of a contemporary Indian home, arranged as a podcast set. " +
-        "An exposed-brick jaali screen wall casting dappled light, terracotta planters with lush tropical plants, a polished red-oxide floor and slender concrete columns. " +
-        "In the centre, an empty low teak-and-cane armchair, angled slightly toward the camera, with a small side table holding a clay cup and a sketchbook. " +
-        "A black podcast microphone on a boom-arm stand beside the chair, pointing at the seat. Soft, diffused morning daylight.",
-      read: {
-        setting: "a shaded courtyard verandah with an exposed-brick jaali wall, terracotta planters and a red-oxide floor",
-        seat: "low teak-and-cane armchair in the centre",
-        microphone: true,
-        lighting: "soft diffused morning daylight through the brick jaali",
-      },
+      chair: "cane",
+      scene: "a shaded verandah opening onto the courtyard of a contemporary Indian home: an exposed-brick jaali screen wall, terracotta planters with lush tropical plants, slender concrete columns, a small side table with a clay cup and a sketchbook, and a polished red-oxide floor",
+      setting: "a shaded courtyard verandah with an exposed-brick jaali wall, terracotta planters and a red-oxide floor",
     },
     concrete: {
       label: "Concrete & light",
       hint: "Brutalist, skylight",
-      scene:
-        "a modernist exposed-concrete interior inspired by Indian brutalist architecture, arranged as a podcast set. " +
-        "Board-formed concrete walls, a deep circular opening and a skylight sending a soft shaft of light, a low plinth with a white architectural model, a warm wooden floor. " +
-        "In the centre, an empty cognac leather lounge armchair, angled slightly toward the camera. " +
-        "A black podcast microphone on a boom-arm stand beside the chair, pointing at the seat. Calm, warm, cinematic light.",
-      read: {
-        setting: "a brutalist exposed-concrete interior with a circular opening, a skylight and a white architectural model on a plinth",
-        seat: "cognac leather lounge armchair in the centre",
-        microphone: true,
-        lighting: "a soft shaft of warm skylight against cool concrete",
-      },
+      chair: "leather",
+      scene: "a modernist exposed-concrete interior inspired by Indian brutalist architecture: board-formed concrete walls, a deep circular opening, a skylight, a low plinth with a white architectural model, and a warm wooden floor",
+      setting: "a brutalist exposed-concrete interior with a circular opening, a skylight and a white architectural model on a plinth",
+    },
+  };
+
+  const CHAIRS = {
+    auto: { label: "Suits the style", hint: "Automatic" },
+    cane: { label: "Teak & cane", hint: "Mid-century", text: "teak-and-cane lounge armchair" },
+    boucle: { label: "Bouclé", hint: "Cream, rounded", text: "cream bouclé swivel armchair" },
+    leather: { label: "Leather", hint: "Cognac lounge", text: "cognac leather lounge armchair" },
+  };
+
+  const LIGHTS = {
+    warm: { label: "Warm evening", hint: "Lamps, amber glow", text: "warm amber evening light from lamps and soft uplighting, cosy and cinematic", short: "warm amber evening lamplight" },
+    day: { label: "Soft daylight", hint: "Bright, calm", text: "soft natural daylight from a large window, bright and calm", short: "soft natural daylight from a window" },
+    moody: { label: "Moody", hint: "Low-key", text: "low-key cinematic light from warm practical lamps with deep, soft shadows", short: "low-key cinematic lamplight with soft shadows" },
+  };
+
+  const FRAMINGS = {
+    wide: {
+      label: "Whole room",
+      hint: "Recommended",
+      text: "Wide shot of the whole set from about five metres away, camera at seated eye level, straight on. The chair stands in the lower middle of the frame and fills only about a third of the frame width. The whole chair, the microphone stand, the floor and the rug are fully visible, with generous space around the chair and plenty of room above it. Do not crop or zoom in on the chair.",
+    },
+    medium: {
+      label: "A bit closer",
+      hint: "Chair and surroundings",
+      text: "Medium-wide shot from about three metres away, camera at seated eye level, straight on. The chair stands in the lower middle of the frame and fills about half of the frame width. The whole chair, the microphone stand and some of the room around it are visible. Do not crop the chair.",
     },
   };
 
   const FORMATS = {
     vertical: { label: "Vertical 9:16", hint: "Reels, Shorts", aspect: "9:16" },
-    landscape: { label: "Landscape 16:9", hint: "YouTube, LinkedIn", aspect: "16:9" },
+    landscape: { label: "Landscape 16:9", hint: "YouTube", aspect: "16:9" },
   };
 
   const QUALITIES = {
@@ -144,6 +150,7 @@
   const MIN_AUDIO = 2;
   const MAX_AUDIO = 30;
   const MIN_CLIP = 4;
+  const WAV_RATE = 44100;
   const STATE_KEY = "architect-podcast-studio:v2";
   const KEY_STORAGE = "ai-avatar-studio:fal-key";
   const FAL_REST = "https://rest.fal.ai";
@@ -155,38 +162,61 @@
   // ===========================================================================
 
   const DEFAULTS = {
+    characterMode: "upload", // "upload" | "create"
     look: "indowestern",
-    setStyle: "studio",
-    format: "vertical",
-    quality: "720p",
+    characterNotes: "",
+    customCharacterPrompt: null,
     selfieUrl: null,
     characterUrl: null,
     characterSource: null, // "generated" | "uploaded"
     characterLook: null,
     characterInfo: null, // { for, face, outfit, layout } or { for, failed }
+
+    setMode: "upload", // "upload" | "create"
+    setStyle: "studio",
+    chair: "auto",
+    light: "warm",
+    framing: "wide",
+    format: "vertical",
+    useReference: true,
+    setNotes: "",
+    customSetPrompt: null,
     backgroundUrl: null,
     backgroundSource: null,
-    backgroundStyle: null,
     backgroundAspect: null,
+    backgroundRead: null, // description of a generated set, used if reading the image fails
     sceneInfo: null, // { for, setting, seat, microphone, lighting } or { for, failed }
-    audio: null, // { url, name, duration }
+
+    audio: null, // { url, name, duration, format }
     transcript: null, // { for, text, chunks, language } or { for, failed }
+
+    quality: "720p",
     customPrompt: null,
     videoJob: null,
     result: null,
   };
 
-  const state = Object.assign({}, DEFAULTS, loadState());
-  if (!LOOKS[state.look]) state.look = DEFAULTS.look;
-  if (!SETS[state.setStyle]) state.setStyle = DEFAULTS.setStyle;
-  if (!FORMATS[state.format]) state.format = DEFAULTS.format;
-  if (!QUALITIES[state.quality]) state.quality = DEFAULTS.quality;
+  const saved = loadState();
+  const state = Object.assign({}, DEFAULTS, saved);
+  const enums = [["look", LOOKS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES]];
+  for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
+  if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
+  if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
+  // Earlier versions sent the MP4 itself to the video model, which can fail. Ask for the recording again.
+  let audioMigrated = false;
+  if (state.audio && !state.audio.format) {
+    state.audio = null;
+    state.transcript = null;
+    audioMigrated = true;
+  }
+  if (saved.characterSource === "generated" && !("characterMode" in saved)) state.characterMode = "create";
+  if (saved.backgroundSource === "generated" && !("setMode" in saved)) state.setMode = "create";
 
   const busy = { character: null, background: null, audio: null, video: null }; // { text, since, stage }
   const pending = { character: null, scene: null, transcript: null };
   const backend = { mode: "direct", models: DEFAULT_MODELS };
-  let selfiePreview = null; // object URL of the selfie being processed
   let pendingKeyAction = null;
+  let referenceUrl = null;
 
   function loadState() {
     try { return JSON.parse(localStorage.getItem(STATE_KEY) || "{}") || {}; } catch { return {}; }
@@ -206,6 +236,7 @@
   const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
   const stripArticle = (s) => s.replace(/^(a|an|the)\s+/i, "");
   const anyBusy = () => Object.values(busy).some(Boolean);
+  const userError = (msg) => Object.assign(new Error(msg), { userFacing: true });
 
   function clean(text, max = 260) {
     if (typeof text !== "string") return null;
@@ -213,6 +244,11 @@
     if (!t || /^(null|none|n\/a|unknown|not visible)$/i.test(t)) return null;
     if (t.length > max) t = t.slice(0, max).replace(/[,;\s]+[^,;\s]*$/, "");
     return t;
+  }
+
+  function notes(text) {
+    const t = clean(text || "", 300);
+    return t ? `Also: ${t}.` : "";
   }
 
   function setStatus(id, msg, kind = "") {
@@ -246,17 +282,11 @@
   async function api(path, opts = {}) {
     let res;
     try { res = await fetch(path, opts); } catch {
-      const e = new Error("Could not reach the server. Is it still running?");
-      e.network = true;
-      throw e;
+      throw Object.assign(new Error("Could not reach the server. Is it still running?"), { network: true });
     }
     let body = null;
     try { body = await res.json(); } catch { /* not JSON */ }
-    if (!res.ok) {
-      const e = new Error(body?.error || `Server error ${res.status}`);
-      e.status = res.status;
-      throw e;
-    }
+    if (!res.ok) throw Object.assign(new Error(body?.error || `Server error ${res.status}`), { status: res.status });
     return body;
   }
 
@@ -274,21 +304,12 @@
 
   async function falFetch(url, opts = {}) {
     const key = getKey();
-    if (!key) {
-      const e = new Error("Add your fal.ai API key to continue.");
-      e.missingKey = true;
-      throw e;
-    }
+    if (!key) throw Object.assign(new Error("Add your fal.ai API key to continue."), { missingKey: true });
     let res;
     try {
-      res = await fetch(url, {
-        ...opts,
-        headers: { Authorization: `Key ${key}`, Accept: "application/json", ...(opts.headers || {}) },
-      });
+      res = await fetch(url, { ...opts, headers: { Authorization: `Key ${key}`, Accept: "application/json", ...(opts.headers || {}) } });
     } catch {
-      const e = new Error("Could not reach fal.ai. Check your internet connection and try again.");
-      e.network = true;
-      throw e;
+      throw Object.assign(new Error("Could not reach fal.ai. Check your internet connection and try again."), { network: true });
     }
     const text = await res.text();
     let body = null;
@@ -298,9 +319,7 @@
       let msg = detail || `fal.ai error ${res.status}`;
       if (res.status === 401) msg = "fal.ai did not accept the API key. Click the key button at the top right to check it.";
       else if (res.status === 403) msg = `fal.ai refused the request${detail ? `: ${detail}` : ". Check the API key and your fal.ai balance."}`;
-      const e = new Error(msg);
-      e.status = res.status;
-      throw e;
+      throw Object.assign(new Error(msg), { status: res.status });
     }
     return body;
   }
@@ -311,7 +330,7 @@
       fd.append("file", file, file.name || "upload");
       return api("/api/upload", { method: "POST", body: fd });
     }
-    if (file.size > MAX_UPLOAD_BYTES) throw new Error("This file is too large. The limit is 90 MB.");
+    if (file.size > MAX_UPLOAD_BYTES) throw userError("This file is too large. The limit is 90 MB.");
     const contentType = file.type || "application/octet-stream";
     const init = await falFetch(`${FAL_REST}/storage/upload/initiate?storage_type=fal-cdn-v3`, {
       method: "POST",
@@ -345,13 +364,7 @@
     });
     const [owner, alias] = endpoint.split("/");
     const base = `${FAL_QUEUE}/${owner}/${alias}/requests/${r.request_id}`;
-    return {
-      mode: "direct",
-      kind,
-      requestId: r.request_id,
-      statusUrl: r.status_url || `${base}/status`,
-      responseUrl: r.response_url || base,
-    };
+    return { mode: "direct", kind, requestId: r.request_id, statusUrl: r.status_url || `${base}/status`, responseUrl: r.response_url || base };
   }
 
   async function jobStatus(job) {
@@ -394,8 +407,8 @@
   // Prompts
   // ===========================================================================
 
-  function characterPrompt(lookId) {
-    const look = LOOKS[lookId] || LOOKS.indowestern;
+  function characterPrompt() {
+    const look = LOOKS[state.look] || LOOKS.indowestern;
     const outfit = look.outfit
       ? `the full outfit as a ghost mannequin, front view, head to toe: ${look.outfit}`
       : "the full outfit as a ghost mannequin, front view, head to toe: the same clothes the person wears in the photo, completed naturally into a smart full outfit with matching trousers and footwear";
@@ -403,15 +416,30 @@
       "Use the uploaded photo for the face. Create one wide 16:9 character sheet on a plain white background.",
       "LEFT side: close-up studio portrait of this exact person, with the same face, hair, facial hair, glasses (if any) and skin tone. Do not change age, face shape or features. Calm, confident and approachable expression.",
       `RIGHT side: ${outfit}.`,
+      notes(state.characterNotes),
       "Photorealistic, soft even studio light, no text, no logos.",
-    ].join(" ");
+    ].filter(Boolean).join(" ");
   }
 
-  function backgroundPrompt(setId, formatId) {
-    const set = SETS[setId] || SETS.studio;
-    const fmt = FORMATS[formatId] || FORMATS.vertical;
-    const frame = fmt.aspect === "9:16" ? "Vertical 9:16" : "Wide 16:9";
-    return `${frame} photo of ${set.scene} No people. Photorealistic, natural colours, eye-level camera, gentle depth of field, no text, no logos.`;
+  function chairName() {
+    const id = state.chair === "auto" ? SET_STYLES[state.setStyle].chair : state.chair;
+    return CHAIRS[id].text;
+  }
+
+  function setPrompt() {
+    const style = SET_STYLES[state.setStyle];
+    const fmt = FORMATS[state.format];
+    return [
+      state.useReference
+        ? "Use the attached image only as a guide for camera distance, camera height, framing and composition: match how much of the room is visible and how small the chair is in the frame. Do not copy its furniture, decor or colours unless they are described below."
+        : "",
+      `${fmt.aspect === "9:16" ? "Vertical 9:16" : "Wide 16:9"} photograph of an empty podcast set in ${style.scene}.`,
+      `In the centre stands an empty ${chairName()}, angled slightly toward the camera, with a black podcast microphone on a boom-arm stand beside it, pointing at the seat.`,
+      FRAMINGS[state.framing].text,
+      `Lighting: ${LIGHTS[state.light].text}.`,
+      notes(state.setNotes),
+      "No people. Photorealistic interior photography, natural colours, sharp focus, no text, no logos.",
+    ].filter(Boolean).join(" ");
   }
 
   function characterDetails() {
@@ -425,8 +453,7 @@
   function sceneDetails() {
     const info = state.sceneInfo;
     if (info && info.for === state.backgroundUrl && !info.failed) return { ...info, source: "analysis" };
-    const set = state.backgroundSource === "generated" ? SETS[state.backgroundStyle] : null;
-    if (set) return { ...set.read, source: "preset" };
+    if (state.backgroundSource === "generated" && state.backgroundRead) return { ...state.backgroundRead, source: "preset" };
     return { setting: null, seat: null, microphone: false, lighting: null, source: "generic" };
   }
 
@@ -493,9 +520,8 @@
     const p2 = `@Image2 defines the set${sc.setting ? `: ${sc.setting}` : ""}. Keep the layout, furniture, props and lighting exactly as in @Image2.`;
 
     const p3 =
-      `@Video1 defines only the audio. Use it exactly as provided as the only audio track. ` +
-      `The architect lip-syncs precisely to @Video1${lang ? `, speaking ${lang}` : ""}. ` +
-      `Do not use any visuals from @Video1. No new dialogue, voice-over, music or sound effects.`;
+      `@Audio1 is the architect's voice. Use it exactly as provided as the only audio track, without changing the words, voice or timing. ` +
+      `The architect lip-syncs precisely to @Audio1${lang ? `, speaking ${lang}` : ""}. No new dialogue, voice-over, music or sound effects.`;
 
     const seat = sc.seat ? `sits relaxed in the ${stripArticle(sc.seat)}` : "sits relaxed at the centre of the set";
     const p4 =
@@ -524,6 +550,14 @@
     return [p1, p2, p3, p4, shots.join("\n"), p6].join("\n\n");
   }
 
+  // Prompt boxes: each is written automatically until the user chooses to edit it.
+  const PROMPT_BOXES = {
+    character: { custom: "customCharacterPrompt", compose: characterPrompt, ta: "prompt-character", mode: "pmode-character", edit: "btn-customise-character", auto: "btn-auto-character" },
+    set: { custom: "customSetPrompt", compose: setPrompt, ta: "prompt-set", mode: "pmode-set", edit: "btn-customise-set", auto: "btn-auto-set" },
+    video: { custom: "customPrompt", compose: composeVideoPrompt, ta: "prompt-video", mode: "pmode-video", edit: "btn-customise-video", auto: "btn-auto-video" },
+  };
+  const promptFor = (box) => (state[PROMPT_BOXES[box].custom] ?? PROMPT_BOXES[box].compose()).trim();
+
   // ===========================================================================
   // Reading the inputs (vision + transcription)
   // ===========================================================================
@@ -551,70 +585,67 @@
     throw lastErr || new Error("The image could not be analysed.");
   }
 
+  function track(slot, fn) {
+    let p = null;
+    p = (async () => {
+      try { await fn(); } finally {
+        if (pending[slot] === p) pending[slot] = null;
+        save();
+        render();
+      }
+    })();
+    pending[slot] = p;
+    render();
+    return p;
+  }
+
   function analyseCharacter() {
     const url = state.characterUrl;
     if (!url || !hasCredentials()) return null;
-    let p = null;
-    p = (async () => {
+    return track("character", async () => {
       try {
         const j = await runVision(CHARACTER_VISION_PROMPT, url);
         if (state.characterUrl !== url) return;
-        state.characterInfo = {
+        const info = {
           for: url,
           layout: String(j.layout || "").toLowerCase() === "photo" ? "photo" : "sheet",
           face: clean(j.face, 180),
           outfit: clean(j.outfit, 320),
         };
-        if (!state.characterInfo.face && !state.characterInfo.outfit) state.characterInfo = { for: url, failed: true };
+        state.characterInfo = info.face || info.outfit ? info : { for: url, failed: true };
       } catch (err) {
         console.warn("Character analysis failed:", err);
         if (state.characterUrl === url) state.characterInfo = { for: url, failed: true };
-      } finally {
-        if (pending.character === p) pending.character = null;
-        save();
-        render();
       }
-    })();
-    pending.character = p;
-    render();
-    return p;
+    });
   }
 
   function analyseScene() {
     const url = state.backgroundUrl;
     if (!url || !hasCredentials()) return null;
-    let p = null;
-    p = (async () => {
+    return track("scene", async () => {
       try {
         const j = await runVision(SCENE_VISION_PROMPT, url);
         if (state.backgroundUrl !== url) return;
-        state.sceneInfo = {
+        const info = {
           for: url,
           setting: clean(j.setting, 220),
           seat: clean(j.seat, 120),
           microphone: j.microphone === true || /^(true|yes)$/i.test(String(j.microphone)),
           lighting: clean(j.lighting, 110),
         };
-        if (!state.sceneInfo.setting && !state.sceneInfo.seat) state.sceneInfo = { for: url, failed: true };
+        state.sceneInfo = info.setting || info.seat ? info : { for: url, failed: true };
       } catch (err) {
         console.warn("Set analysis failed:", err);
         if (state.backgroundUrl === url) state.sceneInfo = { for: url, failed: true };
-      } finally {
-        if (pending.scene === p) pending.scene = null;
-        save();
-        render();
       }
-    })();
-    pending.scene = p;
-    render();
-    return p;
+    });
   }
 
   function transcribeAudio() {
     const url = state.audio?.url;
     if (!url || !hasCredentials()) return null;
-    let p = null;
-    p = (async () => {
+    return track("transcript", async () => {
       try {
         const r = await runJob("transcribe", { audio_url: url, task: "transcribe", chunk_level: "segment" }, null, 1200);
         if (state.audio?.url !== url) return;
@@ -631,18 +662,11 @@
       } catch (err) {
         console.warn("Transcription failed:", err);
         if (state.audio?.url === url) state.transcript = { for: url, failed: true };
-      } finally {
-        if (pending.transcript === p) pending.transcript = null;
-        save();
-        render();
       }
-    })();
-    pending.transcript = p;
-    render();
-    return p;
+    });
   }
 
-  /** Re-reads any input that has not been read yet (after a reload or once a key is added). */
+  /** Reads any input that has not been read yet (after a reload or once a key is added). */
   function refreshAnalyses(force = false) {
     if (!hasCredentials()) return;
     if (state.characterUrl && !pending.character && (force || state.characterInfo?.for !== state.characterUrl)) analyseCharacter();
@@ -702,41 +726,48 @@
     return null;
   }
 
-  function elementDuration(file, tag) {
-    return new Promise((resolve) => {
-      const el = document.createElement(tag);
-      const url = URL.createObjectURL(file);
-      let settled = false;
-      const done = (d) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        URL.revokeObjectURL(url);
-        el.removeAttribute("src");
-        resolve(Number.isFinite(d) && d > 0 ? d : null);
-      };
-      const timer = setTimeout(() => done(null), 8000);
-      el.preload = "metadata";
-      el.muted = true;
-      el.onloadedmetadata = () => {
-        if (el.duration === Infinity) {
-          el.ontimeupdate = () => done(el.duration);
-          el.currentTime = 1e7;
-        } else {
-          done(el.duration);
-        }
-      };
-      el.onerror = () => done(null);
-      el.src = url;
+  /** Decodes the audio track of a file in the browser (resampled, any channel count). */
+  async function decodeAudio(file) {
+    const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!Ctx) throw new Error("This browser cannot decode audio.");
+    const data = await file.arrayBuffer();
+    const ctx = new Ctx(1, WAV_RATE, WAV_RATE);
+    return new Promise((resolve, reject) => {
+      const p = ctx.decodeAudioData(data, resolve, reject);
+      if (p && typeof p.then === "function") p.then(resolve, reject);
     });
   }
 
-  async function probeDuration(file) {
-    try {
-      const d = await mp4Duration(file);
-      if (d) return d;
-    } catch { /* fall through */ }
-    return (await elementDuration(file, "video")) || (await elementDuration(file, "audio"));
+  /** Encodes an AudioBuffer as a mono 16-bit PCM WAV file. */
+  function encodeWav(buffer, maxSeconds) {
+    const rate = buffer.sampleRate;
+    const len = Math.min(buffer.length, Math.round(rate * maxSeconds));
+    const channels = buffer.numberOfChannels;
+    const mono = new Float32Array(len);
+    for (let c = 0; c < channels; c++) {
+      const d = buffer.getChannelData(c);
+      for (let i = 0; i < len; i++) mono[i] += d[i] / channels;
+    }
+    const out = new DataView(new ArrayBuffer(44 + len * 2));
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, "RIFF");
+    out.setUint32(4, 36 + len * 2, true);
+    str(8, "WAVE");
+    str(12, "fmt ");
+    out.setUint32(16, 16, true);
+    out.setUint16(20, 1, true);
+    out.setUint16(22, 1, true);
+    out.setUint32(24, rate, true);
+    out.setUint32(28, rate * 2, true);
+    out.setUint16(32, 2, true);
+    out.setUint16(34, 16, true);
+    str(36, "data");
+    out.setUint32(40, len * 2, true);
+    for (let i = 0; i < len; i++) {
+      const s = Math.max(-1, Math.min(1, mono[i]));
+      out.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return new Blob([out], { type: "audio/wav" });
   }
 
   function imageSize(file) {
@@ -764,8 +795,17 @@
 
   const isPortrait = (aspect) => aspect === "9:16" || aspect === "3:4";
 
+  async function getReferenceUrl() {
+    if (referenceUrl) return referenceUrl;
+    const res = await fetch(REFERENCE_PATH);
+    if (!res.ok) throw new Error("The framing reference image could not be loaded.");
+    const file = new File([await res.blob()], "podcast-set-framing.jpg", { type: "image/jpeg" });
+    referenceUrl = (await uploadFile(file)).url;
+    return referenceUrl;
+  }
+
   // ===========================================================================
-  // Actions
+  // Actions (nothing here runs on its own: every generation starts from a button)
   // ===========================================================================
 
   function ensureKey(action) {
@@ -779,9 +819,6 @@
     if (!file.type.startsWith("image/")) return setStatus("status-character", "Please choose an image file (JPG, PNG or WebP).", "error");
     if (busy.character) return setStatus("status-character", "Please wait for the current step to finish.", "error");
     if (!ensureKey(() => onSelfie(file))) return;
-    if (selfiePreview) URL.revokeObjectURL(selfiePreview);
-    selfiePreview = URL.createObjectURL(file);
-    Object.assign(state, { characterUrl: null, characterInfo: null, characterSource: null });
     setStatus("status-character", "");
     setBusy("character", "Uploading the selfie…");
     render();
@@ -789,28 +826,28 @@
       const { url } = await uploadFile(file);
       state.selfieUrl = url;
       save();
+      setStatus("status-character", "Selfie added. Choose a look, then press Create character sheet.", "ok");
     } catch (err) {
       setStatus("status-character", err.message, "error");
+    } finally {
       setBusy("character", null);
       render();
-      return;
     }
-    setBusy("character", null);
-    generateCharacter();
-    if (!state.backgroundUrl && !busy.background) generateBackground();
   }
 
   async function generateCharacter() {
-    if (!state.selfieUrl || busy.character) return;
+    if (busy.character) return;
+    if (!state.selfieUrl) return setStatus("status-character", "Add a selfie first.", "error");
     if (!ensureKey(generateCharacter)) return;
     const look = state.look;
+    const prompt = promptFor("character");
     setStatus("status-character", "");
     setBusy("character", "Creating the character sheet…");
     render();
     try {
       const r = await runJob(
         "imageEdit",
-        { prompt: characterPrompt(look), image_urls: [state.selfieUrl], aspect_ratio: "16:9", resolution: "2K", output_format: "png", num_images: 1 },
+        { prompt, image_urls: [state.selfieUrl], aspect_ratio: "16:9", resolution: "2K", output_format: "png", num_images: 1 },
         (s) => { setBusy("character", `Creating the character sheet, ${describe(s)}…`); renderBusy(); },
       );
       const url = r?.images?.[0]?.url;
@@ -851,22 +888,31 @@
   async function generateBackground() {
     if (busy.background) return;
     if (!ensureKey(generateBackground)) return;
-    const style = state.setStyle;
-    const format = state.format;
+    const fmt = FORMATS[state.format];
+    const useRef = state.useReference;
+    const prompt = promptFor("set");
+    const read = {
+      setting: SET_STYLES[state.setStyle].setting,
+      seat: `${chairName()} in the centre`,
+      microphone: true,
+      lighting: LIGHTS[state.light].short,
+    };
     setStatus("status-set", "");
-    setBusy("background", "Creating the studio set…");
+    setBusy("background", useRef ? "Preparing the framing reference…" : "Creating the studio set…");
     render();
     try {
-      const r = await runJob(
-        "image",
-        { prompt: backgroundPrompt(style, format), aspect_ratio: FORMATS[format].aspect, resolution: "2K", output_format: "png", num_images: 1 },
-        (s) => { setBusy("background", `Creating the studio set, ${describe(s)}…`); renderBusy(); },
-      );
+      const input = { prompt, aspect_ratio: fmt.aspect, resolution: "2K", output_format: "png", num_images: 1 };
+      if (useRef) input.image_urls = [await getReferenceUrl()];
+      setBusy("background", "Creating the studio set…");
+      renderBusy();
+      const r = await runJob(useRef ? "imageEdit" : "image", input, (s) => {
+        setBusy("background", `Creating the studio set, ${describe(s)}…`);
+        renderBusy();
+      });
       const url = r?.images?.[0]?.url;
       if (!url) throw new Error("No image came back. Please try again.");
       Object.assign(state, {
-        backgroundUrl: url, backgroundSource: "generated", backgroundStyle: style,
-        backgroundAspect: FORMATS[format].aspect, sceneInfo: null,
+        backgroundUrl: url, backgroundSource: "generated", backgroundAspect: fmt.aspect, backgroundRead: read, sceneInfo: null,
       });
       save();
       setStatus("status-set", "Studio set ready.", "ok");
@@ -884,14 +930,14 @@
     if (busy.background) return setStatus("status-set", "Please wait for the current step to finish.", "error");
     if (!ensureKey(() => onOwnBackground(file))) return;
     setStatus("status-set", "");
-    setBusy("background", "Uploading your set…");
+    setBusy("background", "Uploading the set…");
     render();
     try {
       const size = await imageSize(file);
       const { url } = await uploadFile(file);
       Object.assign(state, {
-        backgroundUrl: url, backgroundSource: "uploaded", backgroundStyle: null,
-        backgroundAspect: (size && nearestAspect(size.w, size.h)) || FORMATS[state.format].aspect, sceneInfo: null,
+        backgroundUrl: url, backgroundSource: "uploaded", backgroundRead: null, sceneInfo: null,
+        backgroundAspect: (size && nearestAspect(size.w, size.h)) || FORMATS[state.format].aspect,
       });
       save();
       setStatus("status-set", "Studio set added.", "ok");
@@ -904,6 +950,10 @@
     }
   }
 
+  /**
+   * Prepares the voice: the audio is taken out of the MP4 and sent to the video model as a clean
+   * WAV voice track, so audio-only MP4s and any video codec work.
+   */
   async function onAudio(file) {
     const isMp4 = /\.mp4$/i.test(file.name || "") || file.type === "video/mp4" || file.type === "audio/mp4";
     if (!isMp4) return setStatus("status-voice", "Please use an MP4 file.", "error");
@@ -912,21 +962,50 @@
     setStatus("status-voice", "");
     setBusy("audio", "Checking the recording…");
     render();
+    const checkLength = (secs) => {
+      if (secs && secs > MAX_AUDIO + 0.2) throw userError(`This recording is ${fmtSec(secs)} long. Please trim it to ${MAX_AUDIO} seconds or less.`);
+      if (secs && secs < MIN_AUDIO) throw userError(`This recording is only ${fmtSec(secs)} long. Please use at least ${MIN_AUDIO} seconds.`);
+    };
     try {
-      const duration = await probeDuration(file);
-      if (duration && duration > MAX_AUDIO + 0.2) {
-        throw new Error(`This recording is ${fmtSec(duration)} long. Please trim it to ${MAX_AUDIO} seconds or less.`);
-      }
-      if (duration && duration < MIN_AUDIO) {
-        throw new Error(`This recording is only ${fmtSec(duration)} long. Please use at least ${MIN_AUDIO} seconds.`);
-      }
-      setBusy("audio", "Uploading the recording…");
+      let secs = null;
+      try { secs = await mp4Duration(file); } catch { /* not readable from the header */ }
+      checkLength(secs);
+
+      setBusy("audio", "Taking the voice out of the MP4…");
       renderBusy();
-      const { url } = await uploadFile(file);
-      state.audio = { url, name: file.name || "recording.mp4", duration: duration || null };
+      let wav = null;
+      try {
+        const buffer = await decodeAudio(file);
+        secs = buffer.duration;
+        checkLength(secs);
+        wav = encodeWav(buffer, MAX_AUDIO + 0.2);
+      } catch (err) {
+        if (err.userFacing) throw err;
+        console.warn("In-browser audio decoding failed, converting on fal.ai instead:", err);
+      }
+
+      const base = (file.name || "recording").replace(/\.[^.]+$/, "");
+      let url;
+      let format;
+      if (wav) {
+        setBusy("audio", "Uploading the voice track…");
+        renderBusy();
+        url = (await uploadFile(new File([wav], `${base}-voice.wav`, { type: "audio/wav" }))).url;
+        format = "wav";
+      } else {
+        setBusy("audio", "Converting the recording…");
+        renderBusy();
+        const src = (await uploadFile(file)).url;
+        const r = await runJob("audioConvert", { audio_urls: [src], output_format: "mp3_44100_128" });
+        url = r?.audio?.url;
+        if (!url) throw new Error("The voice could not be taken out of this MP4. Please export the recording again and retry.");
+        format = "mp3";
+      }
+
+      state.audio = { url, name: file.name || "recording.mp4", duration: secs || null, format };
       state.transcript = null;
       save();
-      setStatus("status-voice", "Recording added. Camera cuts now follow it.", "ok");
+      setStatus("status-voice", "Voice track ready. Clip length and camera cuts now follow it.", "ok");
       transcribeAudio();
     } catch (err) {
       setStatus("status-voice", err.message, "error");
@@ -934,6 +1013,13 @@
       setBusy("audio", null);
       render();
     }
+  }
+
+  function friendlyVideoError(err) {
+    const m = err?.message || String(err);
+    if (/audio_urls|video_urls/i.test(m)) return `The video model could not read the voice track. Please add the recording again in step 3. Details: ${m}`;
+    if (/image_urls/i.test(m)) return `The video model could not read one of the images. Try adding it again as a JPG or PNG. Details: ${m}`;
+    return m;
   }
 
   async function createEpisode() {
@@ -947,11 +1033,10 @@
       await Promise.allSettled(Object.values(pending).filter(Boolean));
       const D = clipDuration();
       const aspect = state.backgroundAspect || FORMATS[state.format].aspect;
-      const prompt = (state.customPrompt ?? composeVideoPrompt()).trim();
       const input = {
-        prompt,
+        prompt: promptFor("video"),
         image_urls: [state.characterUrl, state.backgroundUrl],
-        video_urls: [state.audio.url],
+        audio_urls: [state.audio.url],
         aspect_ratio: aspect,
         resolution: state.quality,
         duration: D ? String(D) : "auto",
@@ -962,7 +1047,7 @@
       state.videoJob = { ...job, startedAt: Date.now(), meta: { aspect, resolution: state.quality, duration: D } };
       save();
     } catch (err) {
-      setStatus("status-video", err.message, "error");
+      setStatus("status-video", friendlyVideoError(err), "error");
       setBusy("video", null);
       render();
       return;
@@ -999,7 +1084,7 @@
     } catch (err) {
       state.videoJob = null;
       save();
-      setStatus("status-video", err.message, "error");
+      setStatus("status-video", friendlyVideoError(err), "error");
       setBusy("video", null);
       render();
     }
@@ -1034,7 +1119,7 @@
   // Rendering
   // ===========================================================================
 
-  function buildChips(containerId, options, key, onChange) {
+  function buildChips(containerId, options, key) {
     const box = $(containerId);
     box.innerHTML = "";
     for (const [id, opt] of Object.entries(options)) {
@@ -1050,7 +1135,6 @@
         if (state[key] === id) return;
         state[key] = id;
         save();
-        onChange?.(id);
         render();
       });
       box.appendChild(b);
@@ -1084,6 +1168,29 @@
     }
     if (img.getAttribute("src") !== url) img.src = url;
     img.hidden = false;
+  }
+
+  function renderTabs(group, panels) {
+    for (const tab of document.querySelectorAll(`.segmented button[data-group="${group}"]`)) {
+      const on = tab.dataset.mode === state[group];
+      tab.setAttribute("aria-selected", String(on));
+      tab.tabIndex = on ? 0 : -1;
+    }
+    for (const [mode, id] of Object.entries(panels)) $(id).hidden = state[group] !== mode;
+  }
+
+  function renderPromptBox(name) {
+    const cfg = PROMPT_BOXES[name];
+    const auto = state[cfg.custom] == null;
+    const ta = $(cfg.ta);
+    const text = auto ? cfg.compose() : state[cfg.custom];
+    if (document.activeElement !== ta && ta.value !== text) ta.value = text;
+    ta.readOnly = auto;
+    const pill = $(cfg.mode);
+    pill.textContent = auto ? "Written automatically" : "Edited by you";
+    pill.className = `pill ${auto ? "pill-auto" : "pill-custom"}`;
+    $(cfg.edit).hidden = !auto;
+    $(cfg.auto).hidden = auto;
   }
 
   function renderBusy() {
@@ -1151,49 +1258,57 @@
     renderKeyPill();
 
     // ---- Step 1: architect ----
+    renderTabs("characterMode", { upload: "panel-char-upload", create: "panel-char-create" });
+    const createChar = state.characterMode === "create";
     updateChips("chips-look", state.look, Boolean(busy.character));
-    const charImg = state.characterUrl || selfiePreview || state.selfieUrl;
-    setImg($("img-character"), charImg);
-    $("drop-selfie").hidden = Boolean(charImg);
-    $("media-character").classList.toggle("is-selfie", !state.characterUrl && Boolean(charImg));
+    setImg($("img-selfie"), state.selfieUrl);
+    $("selfie-empty").hidden = Boolean(state.selfieUrl);
+    $("selfie-slot").classList.toggle("has-image", Boolean(state.selfieUrl));
+    setImg($("img-character"), state.characterUrl);
+    $("drop-character").hidden = Boolean(state.characterUrl) || createChar;
+    $("ph-character").hidden = Boolean(state.characterUrl) || !createChar;
     const btnChar = $("btn-character");
-    btnChar.hidden = !state.selfieUrl;
-    btnChar.disabled = Boolean(busy.character);
-    if (!state.characterUrl || state.characterSource !== "generated") btnChar.textContent = "Create character sheet";
-    else btnChar.textContent = state.characterLook !== state.look ? "Apply this look" : "Create again";
-    btnChar.classList.toggle("btn-primary", !state.characterUrl || state.characterSource !== "generated" || state.characterLook !== state.look);
-    $("btn-change-selfie").hidden = !charImg;
-    $("btn-change-selfie").disabled = Boolean(busy.character);
+    btnChar.disabled = Boolean(busy.character) || !state.selfieUrl;
+    btnChar.textContent = state.characterSource === "generated" && state.characterUrl ? "Create again" : "Create character sheet";
     $("btn-own-character").disabled = Boolean(busy.character);
+    $("btn-own-character").textContent = state.characterUrl && state.characterSource === "uploaded" ? "Replace character sheet" : "Choose character sheet";
+    renderPromptBox("character");
 
     // ---- Step 2: studio set ----
-    updateChips("chips-set", state.setStyle, Boolean(busy.background));
-    updateChips("chips-format", state.format, Boolean(busy.background));
+    renderTabs("setMode", { upload: "panel-set-upload", create: "panel-set-create" });
+    const createSet = state.setMode === "create";
+    const setBusyNow = Boolean(busy.background);
+    updateChips("chips-style", state.setStyle, setBusyNow);
+    updateChips("chips-chair", state.chair, setBusyNow);
+    updateChips("chips-light", state.light, setBusyNow);
+    updateChips("chips-framing", state.framing, setBusyNow);
+    updateChips("chips-format", state.format, setBusyNow);
+    $("opt-reference").checked = state.useReference;
+    $("opt-reference").disabled = setBusyNow;
     setImg($("img-set"), state.backgroundUrl);
-    $("drop-set").hidden = Boolean(state.backgroundUrl);
-    const setAspect = state.backgroundUrl ? state.backgroundAspect : FORMATS[state.format].aspect;
+    $("drop-set").hidden = Boolean(state.backgroundUrl) || createSet;
+    $("ph-set").hidden = Boolean(state.backgroundUrl) || !createSet;
+    const setAspect = state.backgroundUrl ? state.backgroundAspect : createSet ? FORMATS[state.format].aspect : "9:16";
     $("media-set").classList.toggle("media-tall", isPortrait(setAspect));
     $("media-set").classList.toggle("media-wide", !isPortrait(setAspect));
     const btnSet = $("btn-set");
-    btnSet.disabled = Boolean(busy.background);
-    const setChanged =
-      state.backgroundSource === "generated" &&
-      (state.backgroundStyle !== state.setStyle || state.backgroundAspect !== FORMATS[state.format].aspect);
-    btnSet.textContent = !state.backgroundUrl ? "Create studio set" : setChanged ? "Apply changes" : "Create again";
-    btnSet.classList.toggle("btn-primary", !state.backgroundUrl || setChanged || state.backgroundSource !== "generated");
-    $("btn-own-set").disabled = Boolean(busy.background);
+    btnSet.disabled = setBusyNow;
+    btnSet.textContent = state.backgroundSource === "generated" && state.backgroundUrl ? "Create again" : "Create studio set";
+    $("btn-own-set").disabled = setBusyNow;
+    $("btn-own-set").textContent = state.backgroundUrl && state.backgroundSource === "uploaded" ? "Replace set image" : "Choose set image";
+    renderPromptBox("set");
 
     // ---- Step 3: voice ----
     const a = state.audio;
     $("drop-voice").hidden = Boolean(a);
     $("voice-panel").hidden = !a;
-    $("btn-change-voice").hidden = !a;
-    $("btn-change-voice").disabled = Boolean(busy.audio);
+    $("btn-choose-voice").disabled = Boolean(busy.audio);
+    $("btn-choose-voice").textContent = a ? "Replace recording" : "Choose MP4";
     if (a) {
       $("voice-name").textContent = a.name;
       const secs = audioSeconds();
       const lang = transcriptReady() ? LANGUAGES[state.transcript.language] : null;
-      $("voice-meta").textContent = [secs ? fmtSec(secs) : null, lang].filter(Boolean).join(" · ") || "Length being checked";
+      $("voice-meta").textContent = [secs ? fmtSec(secs) : null, lang, "voice track ready"].filter(Boolean).join(" · ");
       const audioEl = $("voice-audio");
       if (audioEl.getAttribute("src") !== a.url) audioEl.src = a.url;
       let line = "";
@@ -1232,7 +1347,7 @@
         : sc.source === "analysis"
           ? { thumb: state.backgroundUrl, text: sc.seat ? `Seat found: ${stripArticle(sc.seat)}` : "Set read, no chair found", stateClass: "is-done" }
           : sc.source === "preset"
-            ? { thumb: state.backgroundUrl, text: `Described from the ${SETS[state.backgroundStyle].label} style`, stateClass: "is-done" }
+            ? { thumb: state.backgroundUrl, text: "Described from your set choices", stateClass: "is-done" }
             : { thumb: state.backgroundUrl, text: "Described in general terms. The set could not be read.", stateClass: "is-warn" });
 
     const cutText = cuts.points.slice(1, -1).map((p) => `${p}s`).join(" and ");
@@ -1256,18 +1371,9 @@
         ? `Still needed: ${missing.join(", ")}.`
         : otherBusy
           ? "Waiting for the current step to finish."
-          : "Uses your fal.ai credits. The prompt and camera cuts are already prepared.";
+          : "Uses fal.ai credits. The prompt and camera cuts are already prepared.";
 
-    // Prompt box
-    const auto = state.customPrompt == null;
-    const ta = $("prompt-video");
-    const text = auto ? composeVideoPrompt() : state.customPrompt;
-    if (document.activeElement !== ta && ta.value !== text) ta.value = text;
-    ta.readOnly = auto;
-    $("prompt-mode").textContent = auto ? "Written automatically" : "Customised";
-    $("prompt-mode").className = `pill ${auto ? "pill-auto" : "pill-custom"}`;
-    $("btn-customise").hidden = !auto;
-    $("btn-auto").hidden = auto;
+    renderPromptBox("video");
     const anyFailed =
       (state.characterUrl && state.characterInfo?.for === state.characterUrl && state.characterInfo.failed) ||
       (state.backgroundUrl && state.sceneInfo?.for === state.backgroundUrl && state.sceneInfo.failed) ||
@@ -1276,7 +1382,7 @@
 
     renderProgress();
 
-    // Result
+    // ---- Result ----
     const r = state.result;
     $("step-result").hidden = !r;
     if (r) {
@@ -1287,16 +1393,16 @@
       $("btn-retake").disabled = Boolean(busy.video) || !ready;
     }
 
-    // Stepper
+    // ---- Stepper ----
     renderStep("character",
       busy.character ? "is-busy" : state.characterUrl ? "is-done" : "is-next",
-      busy.character ? "Working…" : state.characterUrl ? "Ready" : state.selfieUrl ? "Selfie added" : "Add a selfie");
+      busy.character ? "Working…" : state.characterUrl ? "Ready" : state.selfieUrl && createChar ? "Selfie added" : "Upload or create");
     renderStep("set",
       busy.background ? "is-busy" : state.backgroundUrl ? "is-done" : state.characterUrl ? "is-next" : "",
-      busy.background ? "Working…" : state.backgroundUrl ? "Ready" : "Create or upload");
+      busy.background ? "Working…" : state.backgroundUrl ? "Ready" : "Upload or create");
     renderStep("voice",
       busy.audio ? "is-busy" : a ? "is-done" : state.characterUrl && state.backgroundUrl ? "is-next" : "",
-      busy.audio ? "Uploading…" : a ? fmtSec(audioSeconds()) : "Add an MP4");
+      busy.audio ? "Preparing…" : a ? fmtSec(audioSeconds()) : "Add an MP4");
     renderStep("episode",
       busy.video ? "is-busy" : r ? "is-done" : ready ? "is-next" : "",
       busy.video ? "Generating…" : r ? "Clip ready" : ready ? "Ready to create" : "Waiting");
@@ -1323,10 +1429,7 @@
   // Events
   // ===========================================================================
 
-  function bindDrop(zoneId, mediaId, inputId, handler) {
-    const zone = $(zoneId);
-    const media = $(mediaId);
-    const input = $(inputId);
+  function bindDrop(zone, input, handler, { target = zone, enabled = () => true } = {}) {
     zone.addEventListener("click", () => input.click());
     zone.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -1334,19 +1437,24 @@
         input.click();
       }
     });
-    media.addEventListener("dragover", (e) => {
+    target.addEventListener("dragover", (e) => {
+      if (!enabled()) return;
       e.preventDefault();
-      media.classList.add("is-over");
+      target.classList.add("is-over");
     });
-    media.addEventListener("dragleave", (e) => {
-      if (!media.contains(e.relatedTarget)) media.classList.remove("is-over");
+    target.addEventListener("dragleave", (e) => {
+      if (!target.contains(e.relatedTarget)) target.classList.remove("is-over");
     });
-    media.addEventListener("drop", (e) => {
+    target.addEventListener("drop", (e) => {
+      target.classList.remove("is-over");
+      if (!enabled()) return;
       e.preventDefault();
-      media.classList.remove("is-over");
       const f = e.dataTransfer?.files?.[0];
       if (f) handler(f);
     });
+  }
+
+  function bindFileInput(input, handler) {
     input.addEventListener("change", () => {
       const f = input.files?.[0];
       input.value = "";
@@ -1354,54 +1462,99 @@
     });
   }
 
+  function bindPromptBox(name) {
+    const cfg = PROMPT_BOXES[name];
+    $(cfg.edit).addEventListener("click", () => {
+      state[cfg.custom] = cfg.compose();
+      save();
+      render();
+      $(cfg.ta).focus();
+    });
+    $(cfg.auto).addEventListener("click", () => {
+      state[cfg.custom] = null;
+      save();
+      render();
+    });
+    $(cfg.ta).addEventListener("input", (e) => {
+      if (state[cfg.custom] == null) return;
+      state[cfg.custom] = e.target.value;
+      save();
+    });
+  }
+
   function bindEvents() {
     buildChips("chips-look", LOOKS, "look");
-    buildChips("chips-set", SETS, "setStyle");
+    buildChips("chips-style", SET_STYLES, "setStyle");
+    buildChips("chips-chair", CHAIRS, "chair");
+    buildChips("chips-light", LIGHTS, "light");
+    buildChips("chips-framing", FRAMINGS, "framing");
     buildChips("chips-format", FORMATS, "format");
     buildChips("chips-quality", QUALITIES, "quality");
 
-    bindDrop("drop-selfie", "media-character", "file-selfie", onSelfie);
-    bindDrop("drop-set", "media-set", "file-set", onOwnBackground);
-    bindDrop("drop-voice", "media-voice", "file-voice", onAudio);
-    $("file-character").addEventListener("change", (e) => {
-      const f = e.target.files?.[0];
-      e.target.value = "";
-      if (f) onOwnCharacter(f);
+    for (const tab of document.querySelectorAll(".segmented button")) {
+      tab.addEventListener("click", () => {
+        state[tab.dataset.group] = tab.dataset.mode;
+        save();
+        render();
+      });
+      tab.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        const sibling = [...tab.parentElement.children].find((b) => b !== tab);
+        sibling.focus();
+        sibling.click();
+      });
+    }
+
+    // Step 1
+    bindFileInput($("file-selfie"), onSelfie);
+    bindFileInput($("file-character"), onOwnCharacter);
+    bindDrop($("selfie-slot"), $("file-selfie"), onSelfie);
+    bindDrop($("drop-character"), $("file-character"), onOwnCharacter, {
+      target: $("media-character"),
+      enabled: () => state.characterMode === "upload",
+    });
+    $("btn-own-character").addEventListener("click", () => $("file-character").click());
+    $("btn-character").addEventListener("click", generateCharacter);
+    $("input-char-notes").value = state.characterNotes || "";
+    $("input-char-notes").addEventListener("input", (e) => {
+      state.characterNotes = e.target.value;
+      save();
+      renderPromptBox("character");
     });
 
-    // Stop the browser from opening files dropped outside the drop areas.
-    window.addEventListener("dragover", (e) => e.preventDefault());
-    window.addEventListener("drop", (e) => e.preventDefault());
-
-    $("btn-character").addEventListener("click", generateCharacter);
-    $("btn-change-selfie").addEventListener("click", () => $("file-selfie").click());
-    $("btn-own-character").addEventListener("click", () => $("file-character").click());
-    $("btn-set").addEventListener("click", generateBackground);
+    // Step 2
+    bindFileInput($("file-set"), onOwnBackground);
+    bindDrop($("drop-set"), $("file-set"), onOwnBackground, {
+      target: $("media-set"),
+      enabled: () => state.setMode === "upload",
+    });
     $("btn-own-set").addEventListener("click", () => $("file-set").click());
-    $("btn-change-voice").addEventListener("click", () => $("file-voice").click());
+    $("btn-set").addEventListener("click", generateBackground);
+    $("opt-reference").addEventListener("change", (e) => {
+      state.useReference = e.target.checked;
+      save();
+      render();
+    });
+    $("input-set-notes").value = state.setNotes || "";
+    $("input-set-notes").addEventListener("input", (e) => {
+      state.setNotes = e.target.value;
+      save();
+      renderPromptBox("set");
+    });
+
+    // Step 3
+    bindFileInput($("file-voice"), onAudio);
+    bindDrop($("drop-voice"), $("file-voice"), onAudio, { target: $("media-voice") });
+    $("btn-choose-voice").addEventListener("click", () => $("file-voice").click());
+
+    // Step 4
     $("btn-episode").addEventListener("click", createEpisode);
     $("btn-retake").addEventListener("click", () => {
       createEpisode();
       $("step-episode").scrollIntoView({ behavior: "smooth", block: "start" });
     });
     $("btn-download").addEventListener("click", downloadResult);
-
-    $("btn-customise").addEventListener("click", () => {
-      state.customPrompt = composeVideoPrompt();
-      save();
-      render();
-      $("prompt-video").focus();
-    });
-    $("btn-auto").addEventListener("click", () => {
-      state.customPrompt = null;
-      save();
-      render();
-    });
-    $("prompt-video").addEventListener("input", (e) => {
-      if (state.customPrompt == null) return;
-      state.customPrompt = e.target.value;
-      save();
-    });
+    for (const name of Object.keys(PROMPT_BOXES)) bindPromptBox(name);
     $("btn-reread").addEventListener("click", () => {
       if (!ensureKey(() => refreshAnalyses(true))) return;
       refreshAnalyses(true);
@@ -1417,9 +1570,15 @@
       setTimeout(() => { $("btn-copy").textContent = "Copy"; }, 1600);
     });
 
+    // Stop the browser from opening files dropped outside the drop areas.
+    window.addEventListener("dragover", (e) => e.preventDefault());
+    window.addEventListener("drop", (e) => e.preventDefault());
+
     $("btn-reset").addEventListener("click", () => {
-      if (busy.video && !confirm("A clip is still being created. Start over anyway?")) return;
-      if (!busy.video && !confirm("Clear the character, set, recording and clip, and start over?")) return;
+      const msg = busy.video
+        ? "A clip is still being created. Start over anyway?"
+        : "Clear the character, set, recording and clip, and start over? Your fal.ai key is kept.";
+      if (!confirm(msg)) return;
       try { localStorage.removeItem(STATE_KEY); } catch { /* ignore */ }
       location.reload();
     });
@@ -1486,6 +1645,10 @@
 
   bindEvents();
   render();
+  if (audioMigrated) {
+    save();
+    setStatus("status-voice", "Please add the recording again. It is now prepared as a clean voice track for the video model.");
+  }
   detectBackend().then(() => {
     render();
     if (backend.mode === "direct" && !getKey()) openKeyPanel();

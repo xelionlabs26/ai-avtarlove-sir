@@ -16,6 +16,7 @@ const MODELS = {
   video: process.env.SEEDANCE_MODEL || "bytedance/seedance-2.5/reference-to-video",
   vision: process.env.VISION_ENDPOINT || "openrouter/router/vision",
   transcribe: process.env.WHISPER_MODEL || "fal-ai/whisper",
+  audioConvert: process.env.AUDIO_CONVERT_MODEL || "fal-ai/ffmpeg-api/merge-audios",
 };
 
 if (FAL_KEY) {

@@ -5,37 +5,49 @@ set in an architect's studio. Everything between the two uploads is automatic.
 
 ## How it works
 
-| Step | What the user does | What the app does automatically |
-| --- | --- | --- |
-| 1. Architect | Drops a selfie and picks a look (or keeps the default) | Creates a 16:9 character sheet (face left, outfit right), then reads the face and outfit from it |
-| 2. Studio set | Nothing (or picks a style, format, or uploads their own set) | Creates an empty podcast set as soon as the selfie arrives, then reads the seat, props and light from it |
-| 3. Voice | Drops an MP4 recording, 2 to 30 seconds | Reads the exact length, transcribes it and finds the natural pauses |
-| 4. Episode clip | Clicks **Create episode clip** | Writes the video prompt from steps 1 to 3, sets the clip length to the recording, places the camera cuts on pauses, and generates the video |
+Nothing is generated on its own. Every image and video starts from a **Create** button, so credits are only
+spent when the user asks.
 
-The video prompt is rebuilt every time an input changes. It can be viewed, and optionally customised, under
-**Video prompt** in step 4.
+| Step | Upload (free) | Or create (uses credits) | Done automatically |
+| --- | --- | --- | --- |
+| 1. Architect | A ready character sheet (face left, outfit right) | From a selfie, with a look and optional notes | Reads the face and outfit from the sheet |
+| 2. Studio set | A set image (its shape sets the clip format) | From style, chair, light, framing, format and optional notes | Reads the seat, props and light from the set |
+| 3. Voice | An MP4, 2 to 30 seconds | – | Takes the voice out of the MP4 as a clean audio track, measures it, transcribes it and finds natural pauses |
+| 4. Episode clip | – | **Create episode clip** | Writes the video prompt, sets the clip length to the recording and places the camera cuts on pauses |
 
-### Presets
+All three prompts (character sheet, studio set, video) are written automatically and can be opened and edited.
 
-- **Looks:** Indo-western (Nehru jacket over kurta), Studio linen, Handloom khadi, or "As in photo".
-- **Set styles:** Design studio, Courtyard verandah, Concrete & light.
-- **Formats:** Vertical 9:16 (Reels, Shorts) or Landscape 16:9 (YouTube, LinkedIn). An uploaded set keeps its own shape.
-- **Quality:** 480p, 720p or 1080p.
+### Studio set options
+
+- **Style:** Design studio, Podcast lounge, Courtyard, Concrete & light.
+- **Chair:** Suits the style, Teak & cane, Bouclé, Leather.
+- **Light:** Warm evening, Soft daylight, Moody.
+- **Framing:** Whole room (recommended) or a bit closer. Both keep the whole chair in view.
+- **Format:** Vertical 9:16 (Reels, Shorts) or Landscape 16:9 (YouTube).
+- **Match this framing:** sends `public/reference/podcast-set-framing.jpg` with the request as a guide for camera distance,
+  so the set is shown wide like a real podcast studio instead of zoomed in on the chair.
 
 All presets and prompts live at the top of `public/app.js`.
+
+### The voice track
+
+The video model receives the voice as audio (`audio_urls`, `@Audio1`), not as a video. The browser decodes the MP4 and
+uploads a mono WAV, which works for audio-only MP4s and for any video codec. If a browser cannot decode the file, the
+MP4 is converted to MP3 on fal.ai instead.
 
 ### Models (all through one fal.ai key)
 
 | Job | fal.ai endpoint |
 | --- | --- |
-| Character sheet | `fal-ai/nano-banana-pro/edit` |
-| Studio set | `fal-ai/nano-banana-pro` |
+| Character sheet, and studio set with the framing reference | `fal-ai/nano-banana-pro/edit` |
+| Studio set without the reference | `fal-ai/nano-banana-pro` |
 | Reading the sheet and the set | `openrouter/router/vision` |
 | Transcribing the recording | `fal-ai/whisper` |
+| Converting audio a browser cannot decode | `fal-ai/ffmpeg-api/merge-audios` |
 | Video | `bytedance/seedance-2.5/reference-to-video` |
 
 The files reach the video model in a fixed order, so the prompt tags always line up:
-`@Image1` = character sheet, `@Image2` = studio set, `@Video1` = the recording.
+`@Image1` = character sheet, `@Image2` = studio set, `@Audio1` = the voice.
 
 ## Use it on GitHub Pages (no install)
 
@@ -63,7 +75,7 @@ for a key in the browser, exactly like the GitHub Pages version.
 
 ## Notes
 
-- The recording must be an MP4, 2 to 30 seconds, ideally in a quiet room with no music.
+- The recording must be an MP4, 2 to 30 seconds, ideally in a quiet room with no music. It can be a video or audio only.
 - If an image cannot be read, the prompt falls back to the chosen preset's description. If the recording
   cannot be transcribed, the cuts are spaced evenly.
 - An in-progress video job survives a page reload: the page reconnects to it.

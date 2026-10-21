@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Architect Podcast Studio</title>
-  <meta name="description" content="Create a lip-synced podcast clip of the architect from a selfie, a studio set and a voice recording." />
+  <meta name="description" content="Create a lip-synced podcast clip of the architect from a character sheet, a studio set and a voice recording." />
   <meta name="theme-color" content="#F4F3EE" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232B4C9B'/%3E%3Cpath d='M10 24V15a6 6 0 0 1 12 0v9M7 24h18' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -46,8 +46,8 @@
   <main class="container" id="top">
     <section class="hero">
       <p class="eyebrow">Podcast clip maker</p>
-      <h1>A selfie and a voice note in.<br />A podcast clip out.</h1>
-      <p class="lede">Add a photo of the architect and a short recording. The character sheet, studio set, video prompt and camera cuts are prepared for you.</p>
+      <h1>The architect, the set and the voice.<br />One podcast clip.</h1>
+      <p class="lede">Upload what you already have, or create it here. Nothing is generated until you press a Create button, and the video prompt and camera cuts are written for you.</p>
     </section>
 
     <nav class="stepper" aria-label="Progress">
@@ -59,122 +59,228 @@
       </ol>
     </nav>
 
-    <div class="grid-3">
-      <!-- ============ 1. ARCHITECT ============ -->
-      <section class="card" id="step-character" aria-labelledby="h-character">
-        <header class="card-head">
-          <span class="num">1</span>
-          <div>
-            <h2 id="h-character">The architect</h2>
-            <p class="muted">A clear, front-facing selfie. It becomes a character sheet with the face on the left and the outfit on the right.</p>
+    <!-- ===================== 1. ARCHITECT ===================== -->
+    <section class="card step" id="step-character" aria-labelledby="h-character">
+      <header class="card-head">
+        <span class="num">1</span>
+        <div>
+          <h2 id="h-character">The architect</h2>
+          <p class="muted">A character sheet: the face on the left and the full outfit on the right, on a plain white background.</p>
+        </div>
+      </header>
+
+      <div class="step-grid">
+        <div class="step-controls">
+          <div class="segmented" role="tablist" aria-label="Character sheet">
+            <button type="button" role="tab" id="tab-char-upload" data-group="characterMode" data-mode="upload">I have a character sheet</button>
+            <button type="button" role="tab" id="tab-char-create" data-group="characterMode" data-mode="create">Create one from a selfie</button>
           </div>
-        </header>
 
-        <div class="field">
-          <span class="field-label" id="lbl-look">Look</span>
-          <div class="chips" id="chips-look" role="radiogroup" aria-labelledby="lbl-look"></div>
-        </div>
-
-        <div class="media media-wide" id="media-character">
-          <img id="img-character" alt="Character sheet" hidden />
-          <div class="dropzone" id="drop-selfie" role="button" tabindex="0" aria-label="Upload a selfie">
-            <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0-4 4m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-            <strong>Drop a selfie here</strong>
-            <span>or click to choose · JPG, PNG or WebP</span>
-          </div>
-          <div class="busy" id="busy-character" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
-        </div>
-
-        <div class="actions">
-          <button class="btn btn-primary" id="btn-character" type="button" hidden>Create character sheet</button>
-          <button class="btn" id="btn-change-selfie" type="button" hidden>Change selfie</button>
-          <button class="btn btn-quiet" id="btn-own-character" type="button">Upload a ready sheet</button>
-        </div>
-        <p class="status" id="status-character" role="status"></p>
-        <input type="file" id="file-selfie" accept="image/*" hidden />
-        <input type="file" id="file-character" accept="image/*" hidden />
-      </section>
-
-      <!-- ============ 2. STUDIO SET ============ -->
-      <section class="card" id="step-set" aria-labelledby="h-set">
-        <header class="card-head">
-          <span class="num">2</span>
-          <div>
-            <h2 id="h-set">Studio set</h2>
-            <p class="muted">An empty podcast set with the chair free. It is created for you when you add the selfie, or you can upload your own.</p>
-          </div>
-        </header>
-
-        <div class="field">
-          <span class="field-label" id="lbl-set">Style</span>
-          <div class="chips" id="chips-set" role="radiogroup" aria-labelledby="lbl-set"></div>
-        </div>
-        <div class="field">
-          <span class="field-label" id="lbl-format">Format</span>
-          <div class="chips chips-2" id="chips-format" role="radiogroup" aria-labelledby="lbl-format"></div>
-        </div>
-
-        <div class="media media-tall" id="media-set">
-          <img id="img-set" alt="Studio set" hidden />
-          <div class="dropzone dropzone-soft" id="drop-set" role="button" tabindex="0" aria-label="Upload your own studio set image">
-            <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-            <strong>Your studio set appears here</strong>
-            <span>Create one below, or drop your own image</span>
-          </div>
-          <div class="busy" id="busy-set" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
-        </div>
-
-        <div class="actions">
-          <button class="btn btn-primary" id="btn-set" type="button">Create studio set</button>
-          <button class="btn btn-quiet" id="btn-own-set" type="button">Upload my own</button>
-        </div>
-        <p class="status" id="status-set" role="status"></p>
-        <input type="file" id="file-set" accept="image/*" hidden />
-      </section>
-
-      <!-- ============ 3. VOICE ============ -->
-      <section class="card" id="step-voice" aria-labelledby="h-voice">
-        <header class="card-head">
-          <span class="num">3</span>
-          <div>
-            <h2 id="h-voice">Voice</h2>
-            <p class="muted">The architect's own voice as an MP4, up to 30 seconds. The video follows it word for word.</p>
-          </div>
-        </header>
-
-        <div class="media media-voice" id="media-voice">
-          <div class="dropzone" id="drop-voice" role="button" tabindex="0" aria-label="Upload the voice recording as MP4">
-            <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm7 9a7 7 0 0 1-14 0m7 7v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-            <strong>Drop the recording here</strong>
-            <span>MP4 only · 2 to 30 seconds</span>
-          </div>
-          <div class="voice" id="voice-panel" hidden>
-            <div class="voice-top">
-              <span class="voice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span>
-              <div class="voice-info"><b id="voice-name"></b><small id="voice-meta"></small></div>
+          <div class="panel" id="panel-char-upload" role="tabpanel" aria-labelledby="tab-char-upload">
+            <p class="panel-text">Upload a wide image with the face on the left and the full outfit on the right. Uploading is free.</p>
+            <div class="actions">
+              <button class="btn btn-primary" id="btn-own-character" type="button">Choose character sheet</button>
             </div>
-            <audio id="voice-audio" controls preload="none"></audio>
-            <p class="voice-transcript" id="voice-transcript"></p>
           </div>
-          <div class="busy" id="busy-voice" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
+
+          <div class="panel" id="panel-char-create" role="tabpanel" aria-labelledby="tab-char-create">
+            <div class="field">
+              <span class="field-label">Selfie</span>
+              <div class="selfie-row">
+                <div class="selfie-slot" id="selfie-slot" role="button" tabindex="0" aria-label="Upload a selfie">
+                  <img id="img-selfie" alt="Selfie" hidden />
+                  <span class="selfie-empty" id="selfie-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>Add selfie</span>
+                </div>
+                <p class="hint">A clear, front-facing photo in good light. Uploading the selfie is free.</p>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label" id="lbl-look">Look</span>
+              <div class="chips" id="chips-look" role="radiogroup" aria-labelledby="lbl-look"></div>
+            </div>
+            <div class="field">
+              <label class="field-label" for="input-char-notes">Anything to add or change (optional)</label>
+              <input class="text-input" type="text" id="input-char-notes" placeholder="e.g. round black glasses, a dark green Nehru jacket" />
+            </div>
+            <details class="prompt-box" id="pbox-character">
+              <summary><span>Image prompt</span><span class="pill pill-auto" id="pmode-character">Written automatically</span></summary>
+              <textarea id="prompt-character" rows="7" readonly spellcheck="false" aria-label="Character sheet prompt"></textarea>
+              <div class="prompt-actions">
+                <button class="btn btn-small" id="btn-customise-character" type="button">Edit prompt</button>
+                <button class="btn btn-small" id="btn-auto-character" type="button" hidden>Back to automatic</button>
+              </div>
+            </details>
+            <div class="actions">
+              <button class="btn btn-primary" id="btn-character" type="button">Create character sheet</button>
+              <span class="cost">Uses fal.ai credits</span>
+            </div>
+          </div>
+
+          <p class="status" id="status-character" role="status"></p>
+          <input type="file" id="file-selfie" accept="image/*" hidden />
+          <input type="file" id="file-character" accept="image/*" hidden />
         </div>
 
-        <ul class="tips">
-          <li>Record in a quiet room with the phone close to the mouth.</li>
-          <li>No background music. The voice is used exactly as recorded.</li>
-          <li>Camera cuts are timed to the recording automatically.</li>
-        </ul>
-
-        <div class="actions">
-          <button class="btn" id="btn-change-voice" type="button" hidden>Replace recording</button>
+        <div class="step-preview">
+          <div class="media media-wide" id="media-character">
+            <img id="img-character" alt="Character sheet" hidden />
+            <div class="dropzone" id="drop-character" role="button" tabindex="0" aria-label="Upload the character sheet">
+              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0-4 4m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              <strong>Drop the character sheet here</strong>
+              <span>or click to choose · JPG, PNG or WebP</span>
+            </div>
+            <div class="placeholder placeholder-sheet" id="ph-character">
+              <div class="sheet-sketch" aria-hidden="true"><span>Face</span><span>Outfit</span></div>
+              <p>The character sheet appears here after you press Create.</p>
+            </div>
+            <div class="busy" id="busy-character" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
+          </div>
         </div>
-        <p class="status" id="status-voice" role="status"></p>
-        <input type="file" id="file-voice" accept=".mp4,video/mp4,audio/mp4" hidden />
-      </section>
-    </div>
+      </div>
+    </section>
 
-    <!-- ============ 4. EPISODE ============ -->
-    <section class="card card-wide" id="step-episode" aria-labelledby="h-episode">
+    <!-- ===================== 2. STUDIO SET ===================== -->
+    <section class="card step" id="step-set" aria-labelledby="h-set">
+      <header class="card-head">
+        <span class="num">2</span>
+        <div>
+          <h2 id="h-set">Studio set</h2>
+          <p class="muted">An empty podcast set with a free chair and a microphone, seen wide like a real podcast studio.</p>
+        </div>
+      </header>
+
+      <div class="step-grid">
+        <div class="step-controls">
+          <div class="segmented" role="tablist" aria-label="Studio set">
+            <button type="button" role="tab" id="tab-set-upload" data-group="setMode" data-mode="upload">I have a set image</button>
+            <button type="button" role="tab" id="tab-set-create" data-group="setMode" data-mode="create">Create a set</button>
+          </div>
+
+          <div class="panel" id="panel-set-upload" role="tabpanel" aria-labelledby="tab-set-upload">
+            <p class="panel-text">Upload an empty set with a free chair. Use a vertical 9:16 image for Reels and Shorts, or 16:9 for YouTube. Uploading is free.</p>
+            <div class="actions">
+              <button class="btn btn-primary" id="btn-own-set" type="button">Choose set image</button>
+            </div>
+          </div>
+
+          <div class="panel" id="panel-set-create" role="tabpanel" aria-labelledby="tab-set-create">
+            <div class="field">
+              <span class="field-label" id="lbl-style">Style</span>
+              <div class="chips" id="chips-style" role="radiogroup" aria-labelledby="lbl-style"></div>
+            </div>
+            <div class="field">
+              <span class="field-label" id="lbl-chair">Chair</span>
+              <div class="chips" id="chips-chair" role="radiogroup" aria-labelledby="lbl-chair"></div>
+            </div>
+            <div class="field">
+              <span class="field-label" id="lbl-light">Light</span>
+              <div class="chips chips-3" id="chips-light" role="radiogroup" aria-labelledby="lbl-light"></div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <span class="field-label" id="lbl-framing">Framing</span>
+                <div class="chips chips-2" id="chips-framing" role="radiogroup" aria-labelledby="lbl-framing"></div>
+              </div>
+              <div class="field">
+                <span class="field-label" id="lbl-format">Format</span>
+                <div class="chips chips-2" id="chips-format" role="radiogroup" aria-labelledby="lbl-format"></div>
+              </div>
+            </div>
+            <label class="reference">
+              <img src="reference/podcast-set-framing.jpg" alt="Framing reference: a wide view of an empty podcast set" />
+              <span class="reference-text">
+                <span class="reference-check"><input type="checkbox" id="opt-reference" /> <b>Match this framing</b></span>
+                <small>Uses this reference for camera distance only, so the whole room stays in view and the chair is not too close. Your style choices replace its decor.</small>
+              </span>
+            </label>
+            <div class="field">
+              <label class="field-label" for="input-set-notes">Anything to add (optional)</label>
+              <input class="text-input" type="text" id="input-set-notes" placeholder="e.g. a large window behind, terracotta tones, a shelf of books" />
+            </div>
+            <details class="prompt-box" id="pbox-set">
+              <summary><span>Image prompt</span><span class="pill pill-auto" id="pmode-set">Written automatically</span></summary>
+              <textarea id="prompt-set" rows="8" readonly spellcheck="false" aria-label="Studio set prompt"></textarea>
+              <div class="prompt-actions">
+                <button class="btn btn-small" id="btn-customise-set" type="button">Edit prompt</button>
+                <button class="btn btn-small" id="btn-auto-set" type="button" hidden>Back to automatic</button>
+              </div>
+            </details>
+            <div class="actions">
+              <button class="btn btn-primary" id="btn-set" type="button">Create studio set</button>
+              <span class="cost">Uses fal.ai credits</span>
+            </div>
+          </div>
+
+          <p class="status" id="status-set" role="status"></p>
+          <input type="file" id="file-set" accept="image/*" hidden />
+        </div>
+
+        <div class="step-preview">
+          <div class="media media-tall" id="media-set">
+            <img id="img-set" alt="Studio set" hidden />
+            <div class="dropzone" id="drop-set" role="button" tabindex="0" aria-label="Upload the studio set image">
+              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              <strong>Drop the set image here</strong>
+              <span>or click to choose · JPG, PNG or WebP</span>
+            </div>
+            <div class="placeholder placeholder-ref" id="ph-set">
+              <img src="reference/podcast-set-framing.jpg" alt="" />
+              <p><b>Framing reference</b>Your set appears here after you press Create.</p>
+            </div>
+            <div class="busy" id="busy-set" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 3. VOICE ===================== -->
+    <section class="card step" id="step-voice" aria-labelledby="h-voice">
+      <header class="card-head">
+        <span class="num">3</span>
+        <div>
+          <h2 id="h-voice">Voice</h2>
+          <p class="muted">The architect's own voice as an MP4, 2 to 30 seconds. The video follows it word for word.</p>
+        </div>
+      </header>
+
+      <div class="step-grid">
+        <div class="step-controls">
+          <ul class="tips">
+            <li>Record in a quiet room with the phone close to the mouth.</li>
+            <li>No background music. The voice is used exactly as recorded.</li>
+            <li>The voice is taken out of the MP4 as a clean audio track, so a video or an audio-only MP4 both work.</li>
+            <li>Clip length and camera cuts follow the recording automatically.</li>
+          </ul>
+          <div class="actions">
+            <button class="btn btn-primary" id="btn-choose-voice" type="button">Choose MP4</button>
+          </div>
+          <p class="status" id="status-voice" role="status"></p>
+          <input type="file" id="file-voice" accept=".mp4,video/mp4,audio/mp4" hidden />
+        </div>
+
+        <div class="step-preview">
+          <div class="media media-voice" id="media-voice">
+            <div class="dropzone" id="drop-voice" role="button" tabindex="0" aria-label="Upload the voice recording as MP4">
+              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm7 9a7 7 0 0 1-14 0m7 7v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              <strong>Drop the recording here</strong>
+              <span>MP4 only · 2 to 30 seconds</span>
+            </div>
+            <div class="voice" id="voice-panel" hidden>
+              <div class="voice-top">
+                <span class="voice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span>
+                <div class="voice-info"><b id="voice-name"></b><small id="voice-meta"></small></div>
+              </div>
+              <audio id="voice-audio" controls preload="none"></audio>
+              <p class="voice-transcript" id="voice-transcript"></p>
+            </div>
+            <div class="busy" id="busy-voice" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 4. EPISODE ===================== -->
+    <section class="card" id="step-episode" aria-labelledby="h-episode">
       <header class="card-head">
         <span class="num">4</span>
         <div>
@@ -232,20 +338,20 @@
       </div>
       <p class="status" id="status-video" role="status"></p>
 
-      <details class="prompt-box" id="prompt-box">
-        <summary><span>Video prompt</span><span class="pill pill-auto" id="prompt-mode">Written automatically</span></summary>
+      <details class="prompt-box" id="pbox-video">
+        <summary><span>Video prompt</span><span class="pill pill-auto" id="pmode-video">Written automatically</span></summary>
         <textarea id="prompt-video" rows="14" readonly spellcheck="false" aria-label="Video prompt"></textarea>
         <div class="prompt-actions">
-          <button class="btn btn-small" id="btn-customise" type="button">Customise</button>
-          <button class="btn btn-small" id="btn-auto" type="button" hidden>Back to automatic</button>
+          <button class="btn btn-small" id="btn-customise-video" type="button">Edit prompt</button>
+          <button class="btn btn-small" id="btn-auto-video" type="button" hidden>Back to automatic</button>
           <button class="btn btn-small btn-quiet" id="btn-reread" type="button" hidden>Read the inputs again</button>
           <button class="btn btn-small btn-quiet" id="btn-copy" type="button">Copy</button>
         </div>
       </details>
     </section>
 
-    <!-- ============ RESULT ============ -->
-    <section class="card card-wide" id="step-result" hidden aria-labelledby="h-result">
+    <!-- ===================== RESULT ===================== -->
+    <section class="card" id="step-result" hidden aria-labelledby="h-result">
       <header class="card-head">
         <span class="num num-done" aria-hidden="true">✓</span>
         <div>
@@ -259,7 +365,7 @@
           <button class="btn btn-primary" id="btn-download" type="button">Download MP4</button>
           <button class="btn" id="btn-retake" type="button">Create another take</button>
           <a class="btn btn-quiet" id="link-open" target="_blank" rel="noopener" href="#">Open in a new tab</a>
-          <p class="hint">Another take uses the same inputs and prompt and gives a new variation.</p>
+          <p class="hint">Another take uses the same inputs and prompt and gives a new variation. It uses fal.ai credits.</p>
         </div>
       </div>
     </section>
