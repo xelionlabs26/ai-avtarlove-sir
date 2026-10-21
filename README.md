@@ -19,9 +19,10 @@ All three prompts (character sheet, studio set, video) are written automatically
 
 ### Studio set options
 
-- **Style:** Teal velvet (default), Design studio, Podcast lounge, Courtyard, Concrete & light.
-- **Chair:** Suits the style, Teal velvet, Teak & cane, Bouclé, Leather.
-- **Light:** Soft studio (default), Warm evening, Soft daylight, Moody.
+- **Style:** Architect studio (default: plaster walls, tall window, teak bookshelves with white models, drafting table
+  with rolled drawings and a brass lamp), Teal velvet, Podcast lounge, Courtyard, Concrete & light.
+- **Chair:** Teal velvet (default), Suits the style, Teak & cane, Bouclé, Leather.
+- **Light:** Soft daylight (default, from a window on the left), Soft studio, Warm evening, Moody.
 - **Framing:** Talking-head (default), Whole room, or a bit closer. Talking-head is a close, chest-height shot like a
   podcast clip: the chair fills the lower two-thirds, the curtains fill the rest, and a black broadcast mic on a boom arm
   comes in from the left at mouth height. No floor, ceiling, people or text.

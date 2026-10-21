@@ -49,26 +49,28 @@
 
   // Light wording for the video prompt's look paragraph.
   const LIGHT_LOOKS = {
+    day: "soft, warm natural daylight from a window on the left, gentle shadows",
     soft: "soft, even, slightly cool studio light from the front, gentle shadows",
     warm: "warm cinematic lighting with amber and chocolate-brown tones, soft shadows",
-    day: "soft natural daylight with gentle, even shadows",
     moody: "low-key cinematic lighting from warm practical lamps, deep soft shadows",
   };
 
   const SET_STYLES = {
+    studio: {
+      label: "Architect studio",
+      hint: "Books, models, drafting table",
+      chair: "velvet",
+      scene: "an architect's working studio: warm, textured lime-plaster walls in soft ochre, a tall white-framed window on the left letting in daylight, " +
+        "honey-toned teak bookshelves behind the chair filled with architecture books, with small white architectural massing models standing on top of the shelves and on a low cabinet by the window, " +
+        "a wooden drafting table on the right with rolled white drawings and an open floor plan on it, a large architectural floor plan pinned to the wall above it, a brass desk lamp and a cup of pencils, and old wooden floorboards",
+      setting: "an architect's working studio with teak bookshelves, white architectural models, a drafting table with rolled drawings and a tall window",
+    },
     velvet: {
       label: "Teal velvet",
       hint: "Curtains, velvet chair",
       chair: "velvet",
       scene: "a minimal podcast studio: floor-to-ceiling teal-blue velvet curtains with soft, even vertical folds filling the entire background, and nothing else in the room",
       setting: "a minimal podcast studio with floor-to-ceiling teal-blue velvet curtains",
-    },
-    studio: {
-      label: "Design studio",
-      hint: "Books, models, drafting table",
-      chair: "cane",
-      scene: "an architect's design studio: floor-to-ceiling teak bookshelves with architecture monographs and small white massing models, a large drafting table with rolled drawings and a brass task lamp further back, warm lime-plaster walls, and a polished Kota stone floor with a handwoven cotton dhurrie rug",
-      setting: "an architect's design studio with teak bookshelves, white massing models and a drafting table on a Kota stone floor",
     },
     lounge: {
       label: "Podcast lounge",
@@ -95,7 +97,7 @@
 
   const CHAIRS = {
     auto: { label: "Suits the style", hint: "Automatic" },
-    velvet: { label: "Teal velvet", hint: "Deep, rounded arms", text: "deep teal velvet lounge armchair with rounded arms" },
+    velvet: { label: "Teal velvet", hint: "Rolled arms", text: "deep teal velvet armchair with rolled arms" },
     cane: { label: "Teak & cane", hint: "Mid-century", text: "teak-and-cane lounge armchair" },
     boucle: { label: "Bouclé", hint: "Cream, rounded", text: "cream bouclé swivel armchair" },
     leather: { label: "Leather", hint: "Cognac lounge", text: "cognac leather lounge armchair" },
@@ -104,7 +106,7 @@
   const LIGHTS = {
     soft: { label: "Soft studio", hint: "Even, clean", text: "soft, even, diffused studio light from the front, slightly cool and clean, gentle shadows", short: "soft, even studio light from the front" },
     warm: { label: "Warm evening", hint: "Lamps, amber glow", text: "warm amber evening light from lamps and soft uplighting, cosy and cinematic", short: "warm amber evening lamplight" },
-    day: { label: "Soft daylight", hint: "Bright, calm", text: "soft natural daylight from a large window, bright and calm", short: "soft natural daylight from a window" },
+    day: { label: "Soft daylight", hint: "Window light", text: "soft, warm natural daylight from the tall window on the left, calm and bright, gentle shadows", short: "soft, warm daylight from a window on the left" },
     moody: { label: "Moody", hint: "Low-key", text: "low-key cinematic light from warm practical lamps with deep, soft shadows", short: "low-key cinematic lamplight with soft shadows" },
   };
 
@@ -116,7 +118,7 @@
         "Framed like a close talking-head podcast shot. Camera about one and a half metres from the chair, at seated chest height, straight on and very slightly looking down at the seat. " +
         "The chair fills the lower half of the frame, placed right of centre and turned slightly to the left; its right armrest is cut off by the right edge of the frame and the front of the seat is cut off by the bottom edge. " +
         "A black broadcast dynamic microphone on a black boom arm enters from the left edge at about 45 percent of the frame height and hangs straight down, so the microphone sits just above the top-left of the backrest, where a seated person's mouth would be. " +
-        "The upper half of the frame is background only, slightly soft with shallow depth of field, filling the frame behind the chair from edge to edge. No floor or ceiling visible.",
+        "The upper half of the frame is background only, slightly soft with shallow depth of field, filling the frame behind the chair from edge to edge. No ceiling visible; at most a sliver of floor in a bottom corner.",
       noRoomRef: true,
     },
     wide: {
@@ -222,9 +224,9 @@
     characterInfo: null, // { for, face, outfit, layout } or { for, failed }
 
     setMode: "upload", // "upload" | "create"
-    setStyle: "velvet",
-    chair: "auto",
-    light: "soft",
+    setStyle: "studio",
+    chair: "velvet",
+    light: "day",
     framing: "close",
     format: "vertical",
     useReference: true,
@@ -256,8 +258,8 @@
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
   if (!PROVIDERS[state.provider]) state.provider = "kie";
-  if (!saved.setDefaultsV) {
-    Object.assign(state, { setStyle: "velvet", chair: "auto", light: "soft", framing: "close", customSetPrompt: null, setDefaultsV: 2 });
+  if ((saved.setDefaultsV || 0) < 3) {
+    Object.assign(state, { setStyle: "studio", chair: "velvet", light: "day", framing: "close", customSetPrompt: null, setDefaultsV: 3 });
   }
   // Earlier versions sent the MP4 itself to the video model, which can fail. Ask for the recording again.
   let audioMigrated = false;
@@ -587,7 +589,7 @@
         : "",
       `${fmt.aspect === "9:16" ? "Vertical 9:16" : "Wide 16:9"} photograph of an empty podcast set in ${style.scene}.`,
       close
-        ? `In the centre of the frame is an empty ${chairName()}.`
+        ? `In the foreground is an empty ${chairName()}.`
         : `In the centre stands an empty ${chairName()}, angled slightly toward the camera, with a black podcast microphone on a boom-arm stand beside it, pointing at the seat.`,
       FRAMINGS[state.framing].text,
       `Lighting: ${LIGHTS[state.light].text}.`,
@@ -694,12 +696,14 @@
     // 4. Performance, modelled on a calm, seated podcast answer.
     const seatName = sc.seat ? `the ${trim(sc.seat).replace(/^(a|an|the)\s+/i, "").replace(/\s+in the (centre|center).*$/i, "")}` : "the chair";
     const mic = sc.microphone !== false;
-    const p4 = `${Who} sits back in ${seatName} from @Image2, leaning back, relaxed and slightly slouched, knees apart and feet planted, ` +
-      `body turned a little toward ${mic ? `the microphone, which sits close to ${sp.his} mouth without covering ${sp.his} lips` : "the camera"}. ` +
-      `One forearm rests along the armrest${mic ? " by the microphone" : ""}; the other arm drapes over the far armrest with the hand hanging loosely over its front edge. ` +
-      `${Who} speaks in a calm, measured, serious conversational tone, as if answering a host sitting just off-frame to camera-left. ${sp.His} eyes and face stay turned slightly to camera-left, toward the microphone side, for the whole clip and never look into the lens. ` +
-      `${sp.His} mouth shapes every word clearly in sync with @Audio1. On key words ${sp.his} eyebrows lift, ${sp.his} head tilts or gives a slow nod, and the draped hand lifts a little with an open palm, then settles back. ` +
-      `Between phrases ${who} pauses with ${sp.his} mouth closed, blinks slowly and sometimes briefly closes ${sp.his} eyes in thought. ` +
+    const p4 = `${Who} sits back in ${seatName} from @Image2, relaxed and upright, legs apart and feet flat on the floor, ` +
+      `body turned a little toward ${mic ? `the microphone, which hangs close to ${sp.his} mouth without covering ${sp.his} lips` : "the side"}. ` +
+      `Both forearms rest on the armrests. The hand on the far side stays relaxed on the armrest near ${sp.his} knee; ` +
+      `the hand on the ${mic ? "microphone " : ""}side now and then lifts off the armrest into an open-palm gesture toward the host, then settles back. ` +
+      `${Who} speaks in a calm, warm, conversational tone, as if answering a host sitting just off-frame to camera-left. ` +
+      `${sp.His} eyes and face stay turned slightly to camera-left, toward the microphone side, for the whole clip and never look into the lens. ` +
+      `${sp.His} mouth shapes every word clearly in sync with @Audio1. On key words ${sp.his} eyebrows lift and ${sp.his} head turns or tilts slightly; ` +
+      `between phrases ${who} pauses with ${sp.his} mouth closed, blinks naturally and sometimes briefly closes ${sp.his} eyes in thought. ` +
       `Movements stay small and natural: no big gestures, no exaggerated smiling.`;
 
     // 5. Look.
@@ -711,7 +715,7 @@
     let p7;
     if (state.camera !== "cuts") {
       shots = [
-        `Camera: one continuous shot from a locked-off tripod camera, framed as in @Image2: medium shot at seated chest height, straight on, from the knees to just above the head. ` +
+        `Camera: one continuous shot from a locked-off tripod camera at seated chest height, straight on, in the same direction as @Image2: a seated full-body shot with ${who} filling the frame from just above the head down to the shoes, both armrests of the chair visible at the sides, the microphone on its boom arm at the upper left, and the set softly behind. ` +
         `The camera never moves: no cuts, no zoom, no pan, no tilt, no shake. Only ${who} moves.`,
       ];
       p7 = `${Who}'s face, outfit, lighting and scene stay identical throughout.`;
