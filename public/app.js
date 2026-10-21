@@ -55,6 +55,13 @@
   };
 
   const SET_STYLES = {
+    velvet: {
+      label: "Teal velvet",
+      hint: "Curtains, velvet chair",
+      chair: "velvet",
+      scene: "a minimal podcast studio: floor-to-ceiling teal-blue velvet curtains with soft, even vertical folds filling the entire background, and nothing else in the room",
+      setting: "a minimal podcast studio with floor-to-ceiling teal-blue velvet curtains",
+    },
     studio: {
       label: "Design studio",
       hint: "Books, models, drafting table",
@@ -87,18 +94,31 @@
 
   const CHAIRS = {
     auto: { label: "Suits the style", hint: "Automatic" },
+    velvet: { label: "Teal velvet", hint: "Deep, rounded arms", text: "deep teal velvet lounge armchair with rounded arms" },
     cane: { label: "Teak & cane", hint: "Mid-century", text: "teak-and-cane lounge armchair" },
     boucle: { label: "Bouclé", hint: "Cream, rounded", text: "cream bouclé swivel armchair" },
     leather: { label: "Leather", hint: "Cognac lounge", text: "cognac leather lounge armchair" },
   };
 
   const LIGHTS = {
+    soft: { label: "Soft studio", hint: "Even, clean", text: "soft, even, diffused studio light from the front, slightly cool and clean, gentle shadows", short: "soft, even studio light from the front" },
     warm: { label: "Warm evening", hint: "Lamps, amber glow", text: "warm amber evening light from lamps and soft uplighting, cosy and cinematic", short: "warm amber evening lamplight" },
     day: { label: "Soft daylight", hint: "Bright, calm", text: "soft natural daylight from a large window, bright and calm", short: "soft natural daylight from a window" },
     moody: { label: "Moody", hint: "Low-key", text: "low-key cinematic light from warm practical lamps with deep, soft shadows", short: "low-key cinematic lamplight with soft shadows" },
   };
 
   const FRAMINGS = {
+    close: {
+      label: "Talking-head",
+      hint: "Close, like a clip",
+      text:
+        "Framing like a talking-head podcast clip: medium close shot from about one and a half metres away, camera at seated chest height, straight on, with the chair turned slightly toward the left. " +
+        "The chair's backrest and both armrests fill the lower two-thirds of the frame and are cropped by the bottom edge at seat level. " +
+        "The curtains fill everything above the chair, with empty space where a seated person's head and shoulders would be. " +
+        "A black broadcast dynamic microphone on a black boom arm enters from the left edge of the frame and points toward the empty seat at mouth height, about 40 percent down from the top of the frame. " +
+        "Do not show the whole room, the floor or the ceiling.",
+      noRoomRef: true,
+    },
     wide: {
       label: "Whole room",
       hint: "Recommended",
@@ -197,10 +217,10 @@
     characterInfo: null, // { for, face, outfit, layout } or { for, failed }
 
     setMode: "upload", // "upload" | "create"
-    setStyle: "studio",
+    setStyle: "velvet",
     chair: "auto",
-    light: "warm",
-    framing: "wide",
+    light: "soft",
+    framing: "close",
     format: "vertical",
     useReference: true,
     setNotes: "",
@@ -230,6 +250,9 @@
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
   if (!PROVIDERS[state.provider]) state.provider = "kie";
+  if (!saved.setDefaultsV) {
+    Object.assign(state, { setStyle: "velvet", chair: "auto", light: "soft", framing: "close", customSetPrompt: null, setDefaultsV: 2 });
+  }
   // Earlier versions sent the MP4 itself to the video model, which can fail. Ask for the recording again.
   let audioMigrated = false;
   if (state.audio && !state.audio.format) {
@@ -546,19 +569,24 @@
     return CHAIRS[id].text;
   }
 
+  const referenceApplies = () => state.useReference && !FRAMINGS[state.framing].noRoomRef;
+
   function setPrompt() {
     const style = SET_STYLES[state.setStyle];
     const fmt = FORMATS[state.format];
+    const close = Boolean(FRAMINGS[state.framing].noRoomRef);
     return [
-      state.useReference
+      referenceApplies()
         ? "Use the attached image only as a guide for camera distance, camera height, framing and composition: match how much of the room is visible and how small the chair is in the frame. Do not copy its furniture, decor or colours unless they are described below."
         : "",
       `${fmt.aspect === "9:16" ? "Vertical 9:16" : "Wide 16:9"} photograph of an empty podcast set in ${style.scene}.`,
-      `In the centre stands an empty ${chairName()}, angled slightly toward the camera, with a black podcast microphone on a boom-arm stand beside it, pointing at the seat.`,
+      close
+        ? `In the centre of the frame is an empty ${chairName()}.`
+        : `In the centre stands an empty ${chairName()}, angled slightly toward the camera, with a black podcast microphone on a boom-arm stand beside it, pointing at the seat.`,
       FRAMINGS[state.framing].text,
       `Lighting: ${LIGHTS[state.light].text}.`,
       notes(state.setNotes),
-      "No people. Photorealistic interior photography, natural colours, sharp focus, no text, no logos.",
+      "No people, no person, no hands. Photorealistic photograph, natural colours, sharp focus, no text, no captions, no watermark, no logos.",
     ].filter(Boolean).join(" ");
   }
 
@@ -1031,7 +1059,7 @@
     if (busy.background) return;
     if (!ensureKey(generateBackground)) return;
     const fmt = FORMATS[state.format];
-    const useRef = state.useReference;
+    const useRef = referenceApplies();
     const prompt = promptFor("set");
     const style = SET_STYLES[state.setStyle];
     const read = {
@@ -1454,10 +1482,17 @@
     updateChips("chips-framing", state.framing, setBusyNow);
     updateChips("chips-format", state.format, setBusyNow);
     $("opt-reference").checked = state.useReference;
+    $("reference-row").hidden = Boolean(FRAMINGS[state.framing].noRoomRef);
     $("opt-reference").disabled = setBusyNow;
     setImg($("img-set"), state.backgroundUrl);
     $("drop-set").hidden = Boolean(state.backgroundUrl) || createSet;
     $("ph-set").hidden = Boolean(state.backgroundUrl) || !createSet;
+    const closeFraming = Boolean(FRAMINGS[state.framing].noRoomRef);
+    $("ph-set").classList.toggle("placeholder-ref", !closeFraming);
+    $("ph-set").querySelector("img").hidden = closeFraming;
+    $("ph-set").querySelector("p").innerHTML = closeFraming
+      ? "<b>Talking-head framing</b>Your set appears here after you press Create."
+      : "<b>Framing reference</b>Your set appears here after you press Create.";
     const setAspect = state.backgroundUrl ? state.backgroundAspect : createSet ? FORMATS[state.format].aspect : "9:16";
     $("media-set").classList.toggle("media-tall", isPortrait(setAspect));
     $("media-set").classList.toggle("media-wide", !isPortrait(setAspect));

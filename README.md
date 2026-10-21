@@ -19,15 +19,15 @@ All three prompts (character sheet, studio set, video) are written automatically
 
 ### Studio set options
 
-- **Style:** Design studio, Podcast lounge, Courtyard, Concrete & light.
-- **Chair:** Suits the style, Teak & cane, Bouclé, Leather.
-- **Light:** Warm evening, Soft daylight, Moody.
-- **Framing:** Whole room (recommended) or a bit closer. Both keep the whole chair in view.
+- **Style:** Teal velvet (default), Design studio, Podcast lounge, Courtyard, Concrete & light.
+- **Chair:** Suits the style, Teal velvet, Teak & cane, Bouclé, Leather.
+- **Light:** Soft studio (default), Warm evening, Soft daylight, Moody.
+- **Framing:** Talking-head (default), Whole room, or a bit closer. Talking-head is a close, chest-height shot like a
+  podcast clip: the chair fills the lower two-thirds, the curtains fill the rest, and a black broadcast mic on a boom arm
+  comes in from the left at mouth height. No floor, ceiling, people or text.
 - **Format:** Vertical 9:16 (Reels, Shorts) or Landscape 16:9 (YouTube).
-- **Match this framing:** sends `public/reference/podcast-set-framing.jpg` with the request as a guide for camera distance,
-  so the set is shown wide like a real podcast studio instead of zoomed in on the chair.
-
-All presets and prompts live at the top of `public/app.js`.
+- **Match this framing:** for the wide framings only, sends `public/reference/podcast-set-framing.jpg` as a guide for
+  camera distance.
 
 ### The voice track
 
