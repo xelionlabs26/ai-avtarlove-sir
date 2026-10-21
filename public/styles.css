@@ -320,9 +320,6 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
 }
 
 /* ---------- small screens ---------- */
-@media (max-width: 720px) {
-  .stepper ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 @media (max-width: 520px) {
   body { font-size: 14.5px; }
   .container { padding: 24px 16px 44px; }
@@ -417,3 +414,84 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
 .panel .prompt-box textarea { min-height: 170px; }
 
 .notice { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: 0.86rem; }
+
+/* ---------- provider key panel ---------- */
+.mono { font-family: var(--mono); font-size: 0.88rem; }
+.key-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.key-inner .field { max-width: 640px; }
+#provider-tabs { max-width: 320px; }
+
+/* ---------- touch and mobile ---------- */
+button, .btn, .chip, .dropzone, .selfie-slot, .segmented button, summary {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+body { padding-bottom: env(safe-area-inset-bottom); }
+.topbar-inner { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+
+@media (max-width: 640px) {
+  /* 16px text stops iOS from zooming into fields. */
+  .text-input, .key-row input, .prompt-box textarea, input, textarea, select { font-size: 16px; }
+  .hero h1 { font-size: 1.75rem; }
+  .lede { font-size: 0.98rem; }
+  .hero { margin-bottom: 18px; }
+
+  /* Stepper becomes one swipeable row. */
+  .stepper ol {
+    display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 4px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .stepper ol::-webkit-scrollbar { display: none; }
+  .stepper li { flex: 0 0 auto; scroll-snap-align: start; }
+  .stepper a { padding: 8px 10px 8px 8px; }
+
+  .card { padding: 16px; border-radius: 14px; gap: 14px; }
+  .card-head h2 { font-size: 1.06rem; }
+  .step-grid { gap: 18px; }
+
+  /* Main actions fill the width and are easy to hit. */
+  .actions { gap: 10px; }
+  .actions .btn-primary { flex: 1 1 100%; min-height: 50px; font-size: 0.98rem; }
+  .actions .btn-quiet { min-height: 44px; }
+  .btn { min-height: 46px; }
+  .btn-small { min-height: 40px; }
+  .key-actions .btn-primary { flex: 1 1 100%; }
+
+  .segmented button { min-height: 46px; font-size: 0.82rem; line-height: 1.25; }
+  .chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chips-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .chip { padding: 10px 11px; min-height: 52px; }
+
+  .media-tall { height: min(440px, 68vh); }
+  .media-voice { min-height: 170px; }
+  .reference img { width: 48px; height: 86px; }
+  .prompt-box summary { padding: 12px 14px; }
+  .prompt-box textarea { width: calc(100% - 24px); margin: 0 12px; }
+  .prompt-actions { padding: 12px; }
+  #prompt-video { min-height: 260px; }
+
+  .episode { gap: 16px; }
+  .ingredients li { padding: 10px; gap: 10px; }
+  .ing-thumb { width: 56px; height: 44px; }
+  .btn-xl { min-height: 56px; }
+  #video-result { max-height: 72vh; }
+  .result-side .btn { width: 100%; }
+  .foot { flex-direction: column; align-items: flex-start; }
+}
+
+@media (max-width: 380px) {
+  .brand-text strong { font-size: 0.88rem; }
+  .key-pill { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chips-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Touch screens of any size (phones and tablets). */
+@media (pointer: coarse) {
+  .text-input, .key-row input, .prompt-box textarea, input, textarea, select { font-size: 16px; }
+  .prompt-box textarea { line-height: 1.55; }
+  .btn-small, .key-pill { min-height: 42px; }
+  .btn-quiet { min-height: 44px; }
+}
+@media (max-width: 640px) {
+  .key-pill { min-height: 42px; }
+}

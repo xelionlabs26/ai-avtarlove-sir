@@ -157,6 +157,16 @@
   const FAL_QUEUE = "https://queue.fal.run";
   const MAX_UPLOAD_BYTES = 90 * 1024 * 1024;
 
+  // kie.ai: an alternative provider for the images and the Seedance 2.5 video.
+  const KIE_KEY_STORAGE = "architect-podcast-studio:kie-key";
+  const KIE_API = "https://api.kie.ai";
+  const KIE_UPLOAD = "https://kieai.redpandaai.co";
+  const KIE_MODELS = { image: "nano-banana-pro", imageEdit: "nano-banana-pro", video: "bytedance/seedance-2-5" };
+  // Jobs that run on the provider the user picked. The rest (reading images, transcription,
+  // audio conversion) are optional helpers that only run with fal.ai credentials.
+  const PROVIDER_KINDS = new Set(["image", "imageEdit", "video"]);
+  const PROVIDERS = { kie: "kie.ai", fal: "fal.ai" };
+
   // ===========================================================================
   // State
   // ===========================================================================
@@ -190,6 +200,9 @@
     audio: null, // { url, name, duration, format }
     transcript: null, // { for, text, chunks, language } or { for, failed }
 
+    assetId: "",
+
+    provider: "kie", // "kie" | "fal"
     quality: "720p",
     customPrompt: null,
     videoJob: null,
@@ -202,6 +215,7 @@
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
+  if (!PROVIDERS[state.provider]) state.provider = "kie";
   // Earlier versions sent the MP4 itself to the video model, which can fail. Ask for the recording again.
   let audioMigrated = false;
   if (state.audio && !state.audio.format) {
@@ -290,10 +304,19 @@
     return body;
   }
 
-  function getKey() {
-    try { return (localStorage.getItem(KEY_STORAGE) || "").trim(); } catch { return ""; }
-  }
-  const hasCredentials = () => backend.mode === "server" || Boolean(getKey());
+  const readKey = (k) => { try { return (localStorage.getItem(k) || "").trim(); } catch { return ""; } };
+  const getKey = () => readKey(KEY_STORAGE); // fal.ai
+  const getKieKey = () => readKey(KIE_KEY_STORAGE);
+  const writeKey = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* ignore */ } };
+  // fal.ai is available through the local server or a key in this browser.
+  const falReady = () => backend.mode === "server" || Boolean(getKey());
+  const kieReady = () => Boolean(getKieKey());
+  // The provider the user picked for images and video.
+  const hasCredentials = () => (state.provider === "kie" ? kieReady() : falReady());
+  const assetRef = () => {
+    const id = (state.assetId || "").trim().replace(/^asset:\/\//i, "");
+    return state.provider === "kie" && id ? `asset://${id}` : null;
+  };
 
   function falError(body) {
     const d = body?.detail;
@@ -324,7 +347,88 @@
     return body;
   }
 
+  async function kieFetch(url, opts = {}) {
+    const key = getKieKey();
+    if (!key) throw Object.assign(new Error("Add your kie.ai API key to continue."), { missingKey: true });
+    let res;
+    try {
+      res = await fetch(url, { ...opts, headers: { Authorization: `Bearer ${key}`, Accept: "application/json", ...(opts.headers || {}) } });
+    } catch {
+      throw Object.assign(new Error("Could not reach kie.ai. Check your internet connection and try again."), { network: true });
+    }
+    const text = await res.text();
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
+    const code = Number(body?.code ?? res.status);
+    if (!res.ok || code !== 200) {
+      const status = res.ok ? code : res.status;
+      let msg = body?.msg || body?.message || `kie.ai error ${status}`;
+      if (status === 401) msg = "kie.ai did not accept the API key. Click the key button at the top right to check it.";
+      else if (status === 402) msg = "Your kie.ai account does not have enough credits for this.";
+      else if (status === 429) msg = "kie.ai is rate-limiting requests. Wait a moment and try again.";
+      throw Object.assign(new Error(msg), { status });
+    }
+    return body.data;
+  }
+
+  async function kieUpload(file) {
+    if (file.size > MAX_UPLOAD_BYTES) throw userError("This file is too large. The limit is 90 MB.");
+    const fd = new FormData();
+    fd.append("file", file, file.name || `upload-${Date.now()}`);
+    fd.append("uploadPath", "architect-podcast-studio");
+    const data = await kieFetch(`${KIE_UPLOAD}/api/file-stream-upload`, { method: "POST", body: fd });
+    const url = data?.downloadUrl || data?.fileUrl;
+    if (!url) throw new Error("kie.ai did not return a file link. Please try again.");
+    return { url };
+  }
+
+  /** Converts the app's request (fal.ai field names) into a kie.ai createTask input. */
+  function kieInput(kind, input) {
+    if (kind === "video") {
+      const out = {
+        prompt: input.prompt,
+        reference_image_urls: input.image_urls,
+        reference_audio_urls: input.audio_urls,
+        aspect_ratio: input.aspect_ratio,
+        resolution: input.resolution,
+        duration: input.duration === "auto" ? -1 : Number(input.duration),
+      };
+      return out;
+    }
+    const out = { prompt: input.prompt, aspect_ratio: input.aspect_ratio, resolution: input.resolution, output_format: "png" };
+    if (kind === "imageEdit") out.image_input = input.image_urls;
+    return out;
+  }
+
+  async function kieSubmit(kind, input) {
+    const data = await kieFetch(`${KIE_API}/api/v1/jobs/createTask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: KIE_MODELS[kind], input: kieInput(kind, input) }),
+    });
+    if (!data?.taskId) throw new Error("kie.ai did not return a task. Please try again.");
+    return { mode: "kie", kind, requestId: data.taskId };
+  }
+
+  async function kieStatus(job) {
+    const d = await kieFetch(`${KIE_API}/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(job.requestId)}`);
+    const st = String(d?.state || "").toLowerCase();
+    if (st === "fail" || st === "failed") {
+      const msg = [d.failMsg, d.failCode ? `(code ${d.failCode})` : ""].filter(Boolean).join(" ") || "kie.ai could not finish this task.";
+      throw Object.assign(new Error(msg), { status: 400 });
+    }
+    if (st !== "success") return { status: st === "generating" ? "IN_PROGRESS" : "IN_QUEUE", queuePosition: null };
+    let urls = [];
+    try { urls = JSON.parse(d.resultJson || "{}").resultUrls || []; } catch { /* malformed */ }
+    if (!urls.length) throw Object.assign(new Error("kie.ai finished the task without a file."), { status: 400 });
+    const result = job.kind === "video" ? { video: { url: urls[0] } } : { images: urls.map((url) => ({ url })) };
+    return { status: "COMPLETED", queuePosition: null, result };
+  }
+
+  const useKie = (kind) => state.provider === "kie" && PROVIDER_KINDS.has(kind);
+
   async function uploadFile(file) {
+    if (state.provider === "kie") return kieUpload(file);
     if (backend.mode === "server") {
       const fd = new FormData();
       fd.append("file", file, file.name || "upload");
@@ -348,6 +452,7 @@
   }
 
   async function submitJob(kind, input) {
+    if (useKie(kind)) return kieSubmit(kind, input);
     if (backend.mode === "server") {
       const r = await api("/api/jobs", {
         method: "POST",
@@ -368,6 +473,7 @@
   }
 
   async function jobStatus(job) {
+    if (job.mode === "kie") return kieStatus(job);
     if (job.mode === "server") return api(`/api/jobs/${job.kind}/${encodeURIComponent(job.requestId)}`);
     const sep = job.statusUrl.includes("?") ? "&" : "?";
     const s = await falFetch(`${job.statusUrl}${sep}logs=1`);
@@ -507,7 +613,7 @@
   }
 
   function composeVideoPrompt() {
-    const ch = characterDetails();
+    const ch = assetRef() ? { ...characterDetails(), layout: "photo" } : characterDetails();
     const sc = sceneDetails();
     const { points } = currentCuts();
     const lang = transcriptReady() ? LANGUAGES[state.transcript.language] : null;
@@ -601,7 +707,7 @@
 
   function analyseCharacter() {
     const url = state.characterUrl;
-    if (!url || !hasCredentials()) return null;
+    if (!url || !falReady()) return null;
     return track("character", async () => {
       try {
         const j = await runVision(CHARACTER_VISION_PROMPT, url);
@@ -622,7 +728,7 @@
 
   function analyseScene() {
     const url = state.backgroundUrl;
-    if (!url || !hasCredentials()) return null;
+    if (!url || !falReady()) return null;
     return track("scene", async () => {
       try {
         const j = await runVision(SCENE_VISION_PROMPT, url);
@@ -644,7 +750,7 @@
 
   function transcribeAudio() {
     const url = state.audio?.url;
-    if (!url || !hasCredentials()) return null;
+    if (!url || !falReady()) return null;
     return track("transcript", async () => {
       try {
         const r = await runJob("transcribe", { audio_url: url, task: "transcribe", chunk_level: "segment" }, null, 1200);
@@ -668,7 +774,7 @@
 
   /** Reads any input that has not been read yet (after a reload or once a key is added). */
   function refreshAnalyses(force = false) {
-    if (!hasCredentials()) return;
+    if (!falReady()) return;
     if (state.characterUrl && !pending.character && (force || state.characterInfo?.for !== state.characterUrl)) analyseCharacter();
     if (state.backgroundUrl && !pending.scene && (force || state.sceneInfo?.for !== state.backgroundUrl)) analyseScene();
     if (state.audio?.url && !pending.transcript && (force || state.transcript?.for !== state.audio.url)) transcribeAudio();
@@ -811,7 +917,7 @@
   function ensureKey(action) {
     if (hasCredentials()) return true;
     pendingKeyAction = action;
-    openKeyPanel("Add your fal.ai key to continue. The step you started will carry on right after.");
+    openKeyPanel(`Add your ${PROVIDERS[state.provider]} key to continue. The step you started will carry on right after.`);
     return false;
   }
 
@@ -993,6 +1099,9 @@
         url = (await uploadFile(new File([wav], `${base}-voice.wav`, { type: "audio/wav" }))).url;
         format = "wav";
       } else {
+        if (!falReady()) {
+          throw userError("This browser could not read the audio in this MP4. Try Chrome or Safari, or add a fal.ai key in the key panel so the recording can be converted online.");
+        }
         setBusy("audio", "Converting the recording…");
         renderBusy();
         const src = (await uploadFile(file)).url;
@@ -1021,18 +1130,22 @@
   function friendlyVideoError(err) {
     const m = err?.message || String(err);
     if (REAL_PERSON.test(m)) {
+      const route = state.provider === "kie"
+        ? "If the architect has a verified portrait asset ID, enter it in step 1 and try again."
+        : "fal.ai does not offer that programme. kie.ai accepts verified portrait asset IDs, so switch to kie.ai in the key panel if you have one.";
       return "Seedance 2.5 refused the images because the character sheet shows a real person's face. " +
-        "Seedance only accepts real people through ByteDance's own verified-portrait programme, which fal.ai does not offer, " +
-        "so trying again with the same sheet will fail the same way. Use a character sheet of a person who is not a real, identifiable individual. " +
-        `Details: ${m}`;
+        "Seedance only accepts real people through ByteDance's verified-portrait programme, so trying again with the same sheet will fail the same way. " +
+        `${route} Details: ${m}`;
     }
     if (/audio_urls|video_urls/i.test(m)) return `The video model could not read the voice track. Please add the recording again in step 3. Details: ${m}`;
     if (/image_urls/i.test(m)) return `The video model could not read one of the images. Try adding it again as a JPG or PNG. Details: ${m}`;
     return m;
   }
 
+  const characterInput = () => assetRef() || state.characterUrl;
+
   async function createEpisode() {
-    if (!(state.characterUrl && state.backgroundUrl && state.audio?.url) || busy.video) return;
+    if (!(characterInput() && state.backgroundUrl && state.audio?.url) || busy.video) return;
     if (!ensureKey(createEpisode)) return;
     setStatus("status-video", "");
     setBusy("video", "Finishing the prompt…", "prompt");
@@ -1044,7 +1157,7 @@
       const aspect = state.backgroundAspect || FORMATS[state.format].aspect;
       const input = {
         prompt: promptFor("video"),
-        image_urls: [state.characterUrl, state.backgroundUrl],
+        image_urls: [characterInput(), state.backgroundUrl],
         audio_urls: [state.audio.url],
         aspect_ratio: aspect,
         resolution: state.quality,
@@ -1053,7 +1166,7 @@
       setBusy("video", "Sending to the video model…", "queue");
       renderProgress();
       const job = await submitJob("video", input);
-      state.videoJob = { ...job, startedAt: Date.now(), meta: { aspect, resolution: state.quality, duration: D } };
+      state.videoJob = { ...job, startedAt: Date.now(), meta: { aspect, resolution: state.quality, duration: D, provider: state.provider } };
       save();
     } catch (err) {
       setStatus("status-video", friendlyVideoError(err), "error");
@@ -1067,7 +1180,7 @@
   async function followVideo() {
     const job = state.videoJob;
     if (!job) return;
-    if (job.mode !== backend.mode) {
+    if (job.mode !== "kie" && job.mode !== backend.mode) {
       state.videoJob = null;
       save();
       return render();
@@ -1232,20 +1345,26 @@
 
   function renderKeyPill() {
     const pill = $("key-status");
+    const name = PROVIDERS[state.provider];
     pill.classList.remove("is-ok", "is-missing", "is-server");
-    if (backend.mode === "server") {
-      pill.textContent = "Server key in use";
-      pill.classList.add("is-ok", "is-server");
-      pill.title = "The fal.ai key is stored on the server.";
-    } else if (getKey()) {
-      pill.textContent = "fal.ai connected";
+    if (hasCredentials()) {
+      pill.textContent = `${name} connected`;
       pill.classList.add("is-ok");
-      pill.title = "Change or remove your fal.ai key";
+      pill.title = state.provider === "fal" && backend.mode === "server" ? "The fal.ai key is stored on the server." : `Change the provider or the API keys`;
     } else {
-      pill.textContent = "Add fal.ai key";
+      pill.textContent = `Add ${name} key`;
       pill.classList.add("is-missing");
-      pill.title = "Add your fal.ai key";
+      pill.title = `Add your ${name} API key`;
     }
+    for (const b of document.querySelectorAll("#provider-tabs button")) {
+      const on = b.dataset.provider === state.provider;
+      b.setAttribute("aria-selected", String(on));
+      b.tabIndex = on ? 0 : -1;
+    }
+    $("fal-key-server").hidden = backend.mode !== "server";
+    $("input-fal-key").hidden = backend.mode === "server";
+    $("fal-key-label").textContent = state.provider === "fal" ? "fal.ai API key" : "fal.ai API key (optional)";
+    $("fal-key-hint").hidden = state.provider === "fal";
   }
 
   function setIngredient(id, { thumb, text, stateClass }) {
@@ -1265,6 +1384,8 @@
 
   function render() {
     renderKeyPill();
+    for (const el of document.querySelectorAll(".cost")) el.textContent = `Uses ${PROVIDERS[state.provider]} credits`;
+    $("asset-row").hidden = state.provider !== "kie";
 
     // ---- Step 1: architect ----
     renderTabs("characterMode", { upload: "panel-char-upload", create: "panel-char-create" });
@@ -1339,7 +1460,9 @@
     const D = clipDuration();
     const cuts = currentCuts();
 
-    setIngredient("ing-character", !state.characterUrl
+    setIngredient("ing-character", assetRef() && !state.characterUrl
+      ? { thumb: null, text: `Verified portrait ${assetRef()}`, stateClass: "is-done" }
+      : !state.characterUrl
       ? { thumb: null, text: "Waiting for the character sheet", stateClass: busy.character ? "is-busy" : "is-wait" }
       : pending.character
         ? { thumb: state.characterUrl, text: "Reading the face and outfit…", stateClass: "is-busy" }
@@ -1369,7 +1492,7 @@
     $("fact-length").textContent = D ? `${D} seconds` : "Follows the recording";
     $("fact-format").textContent = ASPECTS[state.backgroundAspect || FORMATS[state.format].aspect];
 
-    const missing = [!state.characterUrl && "character sheet", !state.backgroundUrl && "studio set", !a && "voice recording"].filter(Boolean);
+    const missing = [!characterInput() && "character sheet", !state.backgroundUrl && "studio set", !a && "voice recording"].filter(Boolean);
     const otherBusy = busy.character || busy.background || busy.audio;
     const ready = missing.length === 0;
     $("btn-episode").disabled = !ready || Boolean(busy.video) || Boolean(otherBusy);
@@ -1380,7 +1503,7 @@
         ? `Still needed: ${missing.join(", ")}.`
         : otherBusy
           ? "Waiting for the current step to finish."
-          : "Uses fal.ai credits. The prompt and camera cuts are already prepared.";
+          : `Uses ${PROVIDERS[state.provider]} credits. The prompt and camera cuts are already prepared.`;
 
     renderPromptBox("video");
     const anyFailed =
@@ -1404,8 +1527,8 @@
 
     // ---- Stepper ----
     renderStep("character",
-      busy.character ? "is-busy" : state.characterUrl ? "is-done" : "is-next",
-      busy.character ? "Working…" : state.characterUrl ? "Ready" : state.selfieUrl && createChar ? "Selfie added" : "Upload or create");
+      busy.character ? "is-busy" : characterInput() ? "is-done" : "is-next",
+      busy.character ? "Working…" : characterInput() ? "Ready" : state.selfieUrl && createChar ? "Selfie added" : "Upload or create");
     renderStep("set",
       busy.background ? "is-busy" : state.backgroundUrl ? "is-done" : state.characterUrl ? "is-next" : "",
       busy.background ? "Working…" : state.backgroundUrl ? "Ready" : "Upload or create");
@@ -1422,11 +1545,12 @@
   // ===========================================================================
 
   function openKeyPanel(message) {
-    if (backend.mode === "server") return;
     $("key-panel").hidden = false;
-    $("input-key").value = getKey();
+    $("input-kie-key").value = getKieKey();
+    $("input-fal-key").value = getKey();
     setStatus("status-key", message || "");
-    $("input-key").focus();
+    renderKeyPill();
+    (state.provider === "kie" ? $("input-kie-key") : backend.mode === "server" ? $("btn-save-key") : $("input-fal-key")).focus();
   }
 
   function closeKeyPanel() {
@@ -1594,16 +1718,27 @@
 
     // Key panel
     $("key-status").addEventListener("click", () => {
-      if (backend.mode === "server") return;
       if ($("key-panel").hidden) openKeyPanel();
       else closeKeyPanel();
     });
     $("btn-close-key").addEventListener("click", closeKeyPanel);
+    for (const b of document.querySelectorAll("#provider-tabs button")) {
+      b.addEventListener("click", () => {
+        if (busy.video) return setStatus("status-key", "Wait for the current clip to finish before switching provider.", "error");
+        state.provider = b.dataset.provider;
+        save();
+        setStatus("status-key", "");
+        render();
+      });
+    }
     $("btn-save-key").addEventListener("click", () => {
-      const v = $("input-key").value.trim();
-      if (!v) return setStatus("status-key", "Paste your key first.", "error");
-      try { localStorage.setItem(KEY_STORAGE, v); } catch { /* ignore */ }
-      setStatus("status-key", "Key saved in this browser.", "ok");
+      writeKey(KIE_KEY_STORAGE, $("input-kie-key").value.trim());
+      if (backend.mode !== "server") writeKey(KEY_STORAGE, $("input-fal-key").value.trim());
+      if (!hasCredentials()) {
+        render();
+        return setStatus("status-key", `Paste your ${PROVIDERS[state.provider]} key first.`, "error");
+      }
+      setStatus("status-key", "Saved in this browser.", "ok");
       render();
       setTimeout(closeKeyPanel, 700);
       const action = pendingKeyAction;
@@ -1611,14 +1746,24 @@
       if (action) action();
       refreshAnalyses();
     });
-    $("input-key").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") $("btn-save-key").click();
-      if (e.key === "Escape") closeKeyPanel();
-    });
+    for (const id of ["input-kie-key", "input-fal-key"]) {
+      $(id).addEventListener("keydown", (e) => {
+        if (e.key === "Enter") $("btn-save-key").click();
+        if (e.key === "Escape") closeKeyPanel();
+      });
+    }
     $("btn-forget-key").addEventListener("click", () => {
-      try { localStorage.removeItem(KEY_STORAGE); } catch { /* ignore */ }
-      $("input-key").value = "";
-      setStatus("status-key", "Key removed from this browser.", "ok");
+      writeKey(KIE_KEY_STORAGE, "");
+      writeKey(KEY_STORAGE, "");
+      $("input-kie-key").value = "";
+      $("input-fal-key").value = "";
+      setStatus("status-key", "Keys removed from this browser.", "ok");
+      render();
+    });
+    $("input-asset").value = state.assetId || "";
+    $("input-asset").addEventListener("input", (e) => {
+      state.assetId = e.target.value.trim();
+      save();
       render();
     });
 
@@ -1660,7 +1805,7 @@
   }
   detectBackend().then(() => {
     render();
-    if (backend.mode === "direct" && !getKey()) openKeyPanel();
+    if (!hasCredentials()) openKeyPanel();
     if (state.videoJob) followVideo();
     refreshAnalyses();
   });

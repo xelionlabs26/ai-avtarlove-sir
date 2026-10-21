@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Architect Podcast Studio</title>
   <meta name="description" content="Create a lip-synced podcast clip of the architect from a character sheet, a studio set and a voice recording." />
   <meta name="theme-color" content="#F4F3EE" />
@@ -29,14 +29,34 @@
   <section class="key-panel" id="key-panel" hidden aria-labelledby="key-title">
     <div class="key-inner">
       <div>
-        <h2 id="key-title">Connect your fal.ai account</h2>
-        <p class="muted">Paste your fal.ai API key once. It stays in this browser and is only sent to fal.ai.
-          <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">Get a key</a></p>
+        <h2 id="key-title">Connect your account</h2>
+        <p class="muted">Keys stay in this browser and are only sent to the service they belong to.</p>
       </div>
-      <div class="key-row">
-        <input type="password" id="input-key" placeholder="Paste your fal.ai key" autocomplete="off" spellcheck="false" aria-label="fal.ai API key" />
-        <button class="btn btn-primary" id="btn-save-key" type="button">Save key</button>
-        <button class="btn btn-quiet" id="btn-forget-key" type="button">Remove</button>
+
+      <div class="field">
+        <span class="field-label" id="lbl-provider">Create images and video with</span>
+        <div class="segmented" id="provider-tabs" role="tablist" aria-labelledby="lbl-provider">
+          <button type="button" role="tab" data-provider="kie">kie.ai</button>
+          <button type="button" role="tab" data-provider="fal">fal.ai</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="input-kie-key">kie.ai API key</label>
+        <input class="text-input mono" type="password" id="input-kie-key" placeholder="Paste your kie.ai key" autocomplete="off" spellcheck="false" />
+        <p class="hint"><a href="https://kie.ai/api-key" target="_blank" rel="noopener">Get a kie.ai key</a> · kie.ai keeps uploaded files for a limited time, so finish a clip in one session.</p>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="input-fal-key" id="fal-key-label">fal.ai API key (optional)</label>
+        <input class="text-input mono" type="password" id="input-fal-key" placeholder="Paste your fal.ai key" autocomplete="off" spellcheck="false" />
+        <p class="hint" id="fal-key-server" hidden>The fal.ai key is stored on the server.</p>
+        <p class="hint" id="fal-key-hint">With kie.ai, a fal.ai key is optional. It lets the app read the images and the recording to write a sharper prompt. <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">Get a fal.ai key</a></p>
+      </div>
+
+      <div class="key-actions">
+        <button class="btn btn-primary" id="btn-save-key" type="button">Save</button>
+        <button class="btn btn-quiet" id="btn-forget-key" type="button">Remove keys</button>
         <button class="btn btn-quiet" id="btn-close-key" type="button">Close</button>
       </div>
       <p class="status" id="status-key" role="status"></p>
@@ -75,7 +95,7 @@
             <button type="button" role="tab" id="tab-char-upload" data-group="characterMode" data-mode="upload">I have a character sheet</button>
             <button type="button" role="tab" id="tab-char-create" data-group="characterMode" data-mode="create">Create one from a selfie</button>
           </div>
-          <p class="notice">Seedance 2.5 does not accept a character sheet that shows a real, identifiable person's face. Through fal.ai it refuses the video with a "likenesses of real people" message.</p>
+          <p class="notice">Seedance 2.5 refuses a character sheet that shows a real, identifiable person's face, with a "likenesses of real people" message. For a real person, use a verified portrait asset ID below (kie.ai only).</p>
 
           <div class="panel" id="panel-char-upload" role="tabpanel" aria-labelledby="tab-char-upload">
             <p class="panel-text">Upload a wide image with the face on the left and the full outfit on the right. Uploading is free.</p>
@@ -117,6 +137,11 @@
             </div>
           </div>
 
+          <div class="field asset-row" id="asset-row">
+            <label class="field-label" for="input-asset">Verified portrait asset ID (optional)</label>
+            <input class="text-input mono" type="text" id="input-asset" placeholder="e.g. asset-20261021-abc123" autocomplete="off" spellcheck="false" />
+            <p class="hint">For a real person who has completed ByteDance's real-person verification. When filled in, the video uses this verified portrait instead of the character sheet's face.</p>
+          </div>
           <p class="status" id="status-character" role="status"></p>
           <input type="file" id="file-selfie" accept="image/*" hidden />
           <input type="file" id="file-character" accept="image/*" hidden />
@@ -128,7 +153,7 @@
             <div class="dropzone" id="drop-character" role="button" tabindex="0" aria-label="Upload the character sheet">
               <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0-4 4m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
               <strong>Drop the character sheet here</strong>
-              <span>or click to choose · JPG, PNG or WebP</span>
+              <span>or tap to choose · JPG, PNG or WebP</span>
             </div>
             <div class="placeholder placeholder-sheet" id="ph-character">
               <div class="sheet-sketch" aria-hidden="true"><span>Face</span><span>Outfit</span></div>
@@ -222,7 +247,7 @@
             <div class="dropzone" id="drop-set" role="button" tabindex="0" aria-label="Upload the studio set image">
               <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
               <strong>Drop the set image here</strong>
-              <span>or click to choose · JPG, PNG or WebP</span>
+              <span>or tap to choose · JPG, PNG or WebP</span>
             </div>
             <div class="placeholder placeholder-ref" id="ph-set">
               <img src="reference/podcast-set-framing.jpg" alt="" />
@@ -372,7 +397,7 @@
     </section>
 
     <footer class="foot">
-      <span>Your files and key stay in this browser until you start over.</span>
+      <span>Your files and keys stay in this browser until you start over.</span>
       <button class="btn btn-small btn-quiet" id="btn-reset" type="button">Start over</button>
     </footer>
   </main>

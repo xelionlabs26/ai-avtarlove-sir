@@ -35,26 +35,47 @@ The video model receives the voice as audio (`audio_urls`, `@Audio1`), not as a 
 uploads a mono WAV, which works for audio-only MP4s and for any video codec. If a browser cannot decode the file, the
 MP4 is converted to MP3 on fal.ai instead.
 
-### Models (all through one fal.ai key)
+### Providers: kie.ai (default) or fal.ai
 
-| Job | fal.ai endpoint |
-| --- | --- |
-| Character sheet, and studio set with the framing reference | `fal-ai/nano-banana-pro/edit` |
-| Studio set without the reference | `fal-ai/nano-banana-pro` |
-| Reading the sheet and the set | `openrouter/router/vision` |
-| Transcribing the recording | `fal-ai/whisper` |
-| Converting audio a browser cannot decode | `fal-ai/ffmpeg-api/merge-audios` |
-| Video | `bytedance/seedance-2.5/reference-to-video` |
+Pick the provider in the key panel (top right). The images and the Seedance 2.5 video run on the chosen provider.
+
+| Job | kie.ai model | fal.ai endpoint |
+| --- | --- | --- |
+| Character sheet, and set with the framing reference | `nano-banana-pro` (with `image_input`) | `fal-ai/nano-banana-pro/edit` |
+| Set without the reference | `nano-banana-pro` | `fal-ai/nano-banana-pro` |
+| Video | `bytedance/seedance-2-5` | `bytedance/seedance-2.5/reference-to-video` |
+
+kie.ai calls go straight from the browser: uploads to `kieai.redpandaai.co/api/file-stream-upload`, jobs to
+`api.kie.ai/api/v1/jobs/createTask`, and status from `api.kie.ai/api/v1/jobs/recordInfo`. kie.ai keeps uploaded files
+for a limited time, so finish a clip in one session.
+
+A fal.ai key is optional with kie.ai. When present, it is used for extra helpers that kie.ai does not provide:
+reading the sheet and the set (`openrouter/router/vision`), transcribing the recording to place cuts on pauses
+(`fal-ai/whisper`), and converting audio a browser cannot decode (`fal-ai/ffmpeg-api/merge-audios`). Without it, the
+prompt uses the preset descriptions and the cuts are spaced evenly.
 
 The files reach the video model in a fixed order, so the prompt tags always line up:
-`@Image1` = character sheet, `@Image2` = studio set, `@Audio1` = the voice.
+`@Image1` = character sheet (or verified portrait), `@Image2` = studio set, `@Audio1` = the voice.
+
+### Real people and verified portraits
+
+Seedance 2.5 refuses reference images that show a real, identifiable person's face. ByteDance allows real people
+only through its verified-portrait programme: the person completes a liveness check and signs an authorisation, and
+the portrait gets an asset ID. kie.ai's Seedance 2.5 accepts these as `asset://<id>`. Enter the ID in step 1, under
+**Verified portrait asset ID**, and the video uses it as `@Image1` instead of the character sheet.
+
+### Phones and tablets
+
+The layout works from 360 px wide upwards. On touch screens, fields use 16 px text so iOS does not zoom in, buttons
+are at least 42 px tall, and the step bar scrolls sideways.
 
 ## Use it on GitHub Pages (no install)
 
 Once Pages is switched on, the app lives at `https://<github-account>.github.io/<repository>/`.
 
-On first visit it asks for a fal.ai API key. The key is kept only in that browser and is sent only to fal.ai,
-so every visitor uses their own key. Click the key button at the top right to change or remove it.
+On first visit it asks for an API key (kie.ai by default, or fal.ai). Keys are kept only in that browser and are
+sent only to the service they belong to, so every visitor uses their own. Click the key button at the top right to
+change the provider or the keys.
 
 One-time setup in the repo:
 
