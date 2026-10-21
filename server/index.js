@@ -13,11 +13,10 @@ const FAL_KEY = process.env.FAL_KEY?.trim();
 const MODELS = {
   image: process.env.NANO_BANANA_MODEL || "fal-ai/nano-banana-pro",
   imageEdit: process.env.NANO_BANANA_EDIT_MODEL || "fal-ai/nano-banana-pro/edit",
+  video: process.env.SEEDANCE_MODEL || "bytedance/seedance-2.5/reference-to-video",
+  vision: process.env.VISION_ENDPOINT || "openrouter/router/vision",
+  transcribe: process.env.WHISPER_MODEL || "fal-ai/whisper",
   audioConvert: process.env.AUDIO_CONVERT_MODEL || "fal-ai/ffmpeg-api/merge-audios",
-  avatarKling: process.env.AVATAR_KLING_MODEL || "fal-ai/kling-video/ai-avatar/v2/pro",
-  avatarAurora: process.env.AVATAR_AURORA_MODEL || "fal-ai/creatify/aurora",
-  avatarOmni: process.env.AVATAR_OMNI_MODEL || "fal-ai/bytedance/omnihuman/v1.5",
-  avatarFabric: process.env.AVATAR_FABRIC_MODEL || "veed/fabric-1.0",
 };
 
 if (FAL_KEY) {

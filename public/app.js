@@ -10,36 +10,14 @@
   const DEFAULT_MODELS = {
     image: "fal-ai/nano-banana-pro",
     imageEdit: "fal-ai/nano-banana-pro/edit",
+    video: "bytedance/seedance-2.5/reference-to-video",
+    vision: "openrouter/router/vision",
+    transcribe: "fal-ai/whisper",
     audioConvert: "fal-ai/ffmpeg-api/merge-audios",
-    avatarKling: "fal-ai/kling-video/ai-avatar/v2/pro",
-    avatarAurora: "fal-ai/creatify/aurora",
-    avatarOmni: "fal-ai/bytedance/omnihuman/v1.5",
-    avatarFabric: "veed/fabric-1.0",
   };
 
-  // Talking-avatar models: one photo plus the voice in, one lip-synced shot out.
-  // They accept photos of real people, which the earlier reference-to-video model refused.
-  const VIDEO_MODELS = {
-    kling: {
-      label: "Best lip-sync", hint: "Recommended", name: "Kling AI Avatar v2 Pro", kind: "avatarKling", prompt: true,
-      input: (image, audio, prompt) => ({ image_url: image, audio_url: audio, prompt }),
-    },
-    aurora: {
-      label: "Natural gestures", hint: "Upper-body motion", name: "Creatify Aurora", kind: "avatarAurora", prompt: true,
-      input: (image, audio, prompt) => ({ image_url: image, audio_url: audio, prompt, resolution: "720p" }),
-    },
-    omni: {
-      label: "Most expressive", hint: "Body and hands", name: "OmniHuman 1.5", kind: "avatarOmni", prompt: true,
-      input: (image, audio, prompt) => ({ image_url: image, audio_url: audio, prompt, resolution: "720p" }),
-    },
-    fabric: {
-      label: "Fastest", hint: "Head and face", name: "VEED Fabric 1.0", kind: "avatarFabric", prompt: false,
-      input: (image, audio) => ({ image_url: image, audio_url: audio, resolution: "720p" }),
-    },
-  };
-
-  // Messages that mean a model refused the input (for example because it shows a real person).
-  const REFUSAL = /likeness|real (people|person|human)|privacy|content[_ ]?policy|moderation|partner_validation|sensitive|50510|not allowed|safety|violat/i;
+  // Vision models that read the character sheet and the set, tried in order.
+  const VISION_MODELS = ["google/gemini-2.5-flash", "openai/gpt-4o-mini"];
 
   // Image used as a camera-distance guide for generated sets (served next to this page).
   const REFERENCE_PATH = "reference/podcast-set-framing.jpg";
@@ -125,6 +103,12 @@
     landscape: { label: "Landscape 16:9", hint: "YouTube", aspect: "16:9" },
   };
 
+  const QUALITIES = {
+    "480p": { label: "Draft", hint: "480p" },
+    "720p": { label: "Standard", hint: "720p" },
+    "1080p": { label: "High", hint: "1080p" },
+  };
+
   const ASPECTS = {
     "21:9": "Cinema 21:9",
     "16:9": "Landscape 16:9",
@@ -133,6 +117,35 @@
     "3:4": "Portrait 3:4",
     "9:16": "Vertical 9:16",
   };
+
+  const LANGUAGES = {
+    en: "English", hi: "Hindi", mr: "Marathi", gu: "Gujarati", bn: "Bengali", ta: "Tamil", te: "Telugu",
+    kn: "Kannada", ml: "Malayalam", pa: "Punjabi", ur: "Urdu", sa: "Sanskrit", ne: "Nepali", as: "Assamese", sd: "Sindhi",
+  };
+
+  const CHARACTER_VISION_PROMPT = [
+    "This image is a character reference for an AI video.",
+    "Usually the LEFT half is a close-up portrait of one person and the RIGHT half shows that person's full outfit on a ghost mannequin.",
+    "Describe only what is visible. Do not guess names, age, profession or emotions.",
+    "Reply with one JSON object and nothing else, using exactly these keys:",
+    '{"layout": "sheet" if it has the portrait-plus-outfit layout, otherwise "photo",',
+    ' "face": "one short phrase: hair style and colour, facial hair or clean-shaven, glasses if any, skin tone",',
+    ' "outfit": "every visible garment, footwear and accessory from top to bottom, with colour and material, comma-separated"}',
+    'Example: {"layout": "sheet", "face": "short wavy black hair, neatly trimmed beard, rimless glasses, medium-brown skin", ' +
+      '"outfit": "charcoal Nehru jacket over an off-white linen kurta, slim charcoal trousers, tan leather loafers, steel wristwatch"}',
+  ].join("\n");
+
+  const SCENE_VISION_PROMPT = [
+    "This image is the empty set for a podcast video.",
+    "Describe only what is visible.",
+    "Reply with one JSON object and nothing else, using exactly these keys:",
+    '{"setting": "one sentence of at most 25 words naming the kind of space and its key furniture, materials and props",',
+    ' "seat": "the main seat a speaker would sit in, with colour or material and its position in the frame, or null if there is none",',
+    ' "microphone": true if a podcast microphone is visible, otherwise false,',
+    ' "lighting": "at most 12 words on the light, its colour and direction"}',
+    'Example: {"setting": "an architect\'s design studio with teak bookshelves, white massing models and a drafting table on a Kota stone floor", ' +
+      '"seat": "teak-and-cane lounge armchair in the centre", "microphone": true, "lighting": "soft late-afternoon daylight from the left with jaali shadows"}',
+  ].join("\n");
 
   const MIN_AUDIO = 2;
   const MAX_AUDIO = 30;
@@ -157,6 +170,7 @@
     characterUrl: null,
     characterSource: null, // "generated" | "uploaded"
     characterLook: null,
+    characterInfo: null, // { for, face, outfit, layout } or { for, failed }
 
     setMode: "upload", // "upload" | "create"
     setStyle: "studio",
@@ -170,17 +184,13 @@
     backgroundUrl: null,
     backgroundSource: null,
     backgroundAspect: null,
-
-    frameUrl: null,
-    frameSource: null, // "generated" | "uploaded"
-    frameFor: null, // { character, background } the photo was made from
-    frameAspect: null,
-    customFramePrompt: null,
+    backgroundRead: null, // description of a generated set, used if reading the image fails
+    sceneInfo: null, // { for, setting, seat, microphone, lighting } or { for, failed }
 
     audio: null, // { url, name, duration, format }
+    transcript: null, // { for, text, chunks, language } or { for, failed }
 
-    videoModel: "kling",
-    consent: false,
+    quality: "720p",
     customPrompt: null,
     videoJob: null,
     result: null,
@@ -188,7 +198,7 @@
 
   const saved = loadState();
   const state = Object.assign({}, DEFAULTS, saved);
-  const enums = [["look", LOOKS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["videoModel", VIDEO_MODELS]];
+  const enums = [["look", LOOKS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES]];
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
@@ -196,14 +206,14 @@
   let audioMigrated = false;
   if (state.audio && !state.audio.format) {
     state.audio = null;
+    state.transcript = null;
     audioMigrated = true;
   }
-  // Prompts written for the old video model use @Image/@Audio tags that the avatar models do not understand.
-  if (typeof state.customPrompt === "string" && /@(Image|Audio|Video)\d/.test(state.customPrompt)) state.customPrompt = null;
   if (saved.characterSource === "generated" && !("characterMode" in saved)) state.characterMode = "create";
   if (saved.backgroundSource === "generated" && !("setMode" in saved)) state.setMode = "create";
 
-  const busy = { character: null, background: null, frame: null, audio: null, video: null }; // { text, since, stage }
+  const busy = { character: null, background: null, audio: null, video: null }; // { text, since, stage }
+  const pending = { character: null, scene: null, transcript: null };
   const backend = { mode: "direct", models: DEFAULT_MODELS };
   let pendingKeyAction = null;
   let referenceUrl = null;
@@ -223,6 +233,8 @@
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const fmtSec = (s) => (Number.isFinite(s) ? `${s.toFixed(1)} s` : "unknown length");
+  const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+  const stripArticle = (s) => s.replace(/^(a|an|the)\s+/i, "");
   const anyBusy = () => Object.values(busy).some(Boolean);
   const userError = (msg) => Object.assign(new Error(msg), { userFacing: true });
 
@@ -430,52 +442,237 @@
     ].filter(Boolean).join(" ");
   }
 
-  function frameAspect() {
-    return state.backgroundAspect || FORMATS[state.format].aspect;
+  function characterDetails() {
+    const info = state.characterInfo;
+    if (info && info.for === state.characterUrl && !info.failed) return { ...info, source: "analysis" };
+    const look = state.characterSource === "generated" ? LOOKS[state.characterLook] : null;
+    if (look?.outfit) return { face: null, outfit: look.outfit, layout: "sheet", source: "preset" };
+    return { face: null, outfit: null, layout: "sheet", source: "generic" };
   }
 
-  function framePrompt() {
-    return [
-      "Image 1 is a photograph of an empty podcast studio set. Image 2 is a character reference sheet of one real person: a face close-up on the left and the full outfit on the right, on a white background.",
-      "Edit Image 1. Keep the exact camera position, lens, framing, crop, perspective, lighting, colours and every object of the set unchanged.",
-      "Place the person from Image 2 sitting naturally in the set's chair: back against the backrest, shoulders relaxed, hands resting loosely on the thighs or armrests, torso turned slightly toward the microphone, face toward the camera, eyes looking into the lens.",
-      "Position the boom-arm microphone in front of them, slightly below and to one side of the mouth, so that it never covers the lips and the whole mouth stays visible.",
-      "Mouth closed, calm, relaxed, slightly friendly expression.",
-      "Preserve the person's identity exactly (face shape, eyes, nose, skin tone, hair, facial hair, glasses, age) and the exact outfit, colours and accessories from Image 2.",
-      "Correct real-world scale relative to the chair, the set's lighting falling on the person, soft contact shadows on the chair and floor.",
-      "Photorealistic photograph, natural skin texture. One person only, no white background, no reference-sheet layout, no text, single frame.",
-    ].join(" ");
+  function sceneDetails() {
+    const info = state.sceneInfo;
+    if (info && info.for === state.backgroundUrl && !info.failed) return { ...info, source: "analysis" };
+    if (state.backgroundSource === "generated" && state.backgroundRead) return { ...state.backgroundRead, source: "preset" };
+    return { setting: null, seat: null, microphone: false, lighting: null, source: "generic" };
   }
 
-  function videoPrompt() {
-    return [
-      "The architect sits relaxed in the chair and speaks to the camera in the calm, articulate and confident manner of a renowned architect on a podcast.",
-      "Lip movements match the voice exactly. Natural blinking, subtle head movement, steady eye contact, and measured hand gestures at chest height that sketch shapes in the air.",
-      "The microphone stays in front of the mouth without covering the lips.",
-      "Static camera, no zoom, no camera movement. Keep the face, hair, outfit, microphone and studio exactly as in the image.",
-      "Photorealistic, natural skin texture, no text.",
-    ].join(" ");
+  function transcriptReady() {
+    const t = state.transcript;
+    return Boolean(t && state.audio && t.for === state.audio.url && !t.failed);
   }
 
   function audioSeconds() {
-    return Number.isFinite(state.audio?.duration) ? state.audio.duration : null;
+    if (Number.isFinite(state.audio?.duration)) return state.audio.duration;
+    if (!transcriptReady()) return null;
+    const ends = state.transcript.chunks.map((c) => Number(c?.timestamp?.[1])).filter(Number.isFinite);
+    return ends.length ? Math.max(...ends) : null;
   }
 
-  function frameIsStale() {
-    return Boolean(
-      state.frameUrl && state.frameSource === "generated" && state.frameFor &&
-      (state.frameFor.character !== state.characterUrl || state.frameFor.background !== state.backgroundUrl),
-    );
+  function clipDuration() {
+    const s = audioSeconds();
+    return s ? clamp(Math.ceil(s - 0.05), MIN_CLIP, MAX_AUDIO) : null;
+  }
+
+  /** Splits the clip into camera shots, preferring natural pauses in the speech. */
+  function planCuts(D, chunks) {
+    const ends = (Array.isArray(chunks) ? chunks : [])
+      .map((c) => Number(Array.isArray(c?.timestamp) ? c.timestamp[1] : NaN))
+      .filter((t) => Number.isFinite(t) && t > 1 && t < D - 1);
+    let snapped = false;
+    const pick = (target, lo, hi) => {
+      let best = null;
+      for (const t of ends) {
+        if (t >= lo && t <= hi && (best === null || Math.abs(t - target) < Math.abs(best - target))) best = t;
+      }
+      if (best === null) return Math.ceil(target - 1e-6);
+      snapped = true;
+      return Math.round(best);
+    };
+    if (D < 6) {
+      const a = clamp(pick(D / 2, D * 0.35, D * 0.65), 2, D - 2);
+      return { points: [0, a, D], snapped };
+    }
+    const w = D / 6;
+    let a = pick(D / 3, D / 3 - w, D / 3 + w);
+    let b = pick((2 * D) / 3, (2 * D) / 3 - w, (2 * D) / 3 + w);
+    a = clamp(a, 2, D - 4);
+    b = clamp(b, a + 2, D - 2);
+    return { points: [0, a, b, D], snapped };
+  }
+
+  function currentCuts() {
+    const D = clipDuration() || MAX_AUDIO;
+    return planCuts(D, transcriptReady() ? state.transcript.chunks : null);
+  }
+
+  function composeVideoPrompt() {
+    const ch = characterDetails();
+    const sc = sceneDetails();
+    const { points } = currentCuts();
+    const lang = transcriptReady() ? LANGUAGES[state.transcript.language] : null;
+
+    const p1 =
+      ch.layout === "photo"
+        ? `@Image1 defines the architect: face, hair, skin tone and full outfit.${ch.face ? ` Face: ${ch.face}.` : ""}${ch.outfit ? ` Outfit: ${ch.outfit}.` : ""} Only this one person. Do not use the background of @Image1.`
+        : `@Image1 defines the architect's face, hair, facial hair, skin tone and full outfit.${ch.face ? ` Face: ${ch.face}.` : ""} Take the face from the left side of @Image1 and the outfit from the right side${ch.outfit ? `: ${ch.outfit}` : ""}. Only this one person. Do not use the white background of @Image1.`;
+
+    const p2 = `@Image2 defines the set${sc.setting ? `: ${sc.setting}` : ""}. Keep the layout, furniture, props and lighting exactly as in @Image2.`;
+
+    const p3 =
+      `@Audio1 is the architect's voice. Use it exactly as provided as the only audio track, without changing the words, voice or timing. ` +
+      `The architect lip-syncs precisely to @Audio1${lang ? `, speaking ${lang}` : ""}. No new dialogue, voice-over, music or sound effects.`;
+
+    const seat = sc.seat ? `sits relaxed in the ${stripArticle(sc.seat)}` : "sits relaxed at the centre of the set";
+    const p4 =
+      `The architect ${seat} and talks to camera in the calm, articulate and confident manner of a renowned architect on a podcast` +
+      `${sc.microphone ? ", microphone near the mouth" : ""}. ` +
+      `Measured, natural hand gestures that sketch forms and spaces in the air, natural blinking, steady eye contact. ` +
+      `${cap(sc.lighting || "soft natural light")}, real skin and fabric texture, photorealistic documentary look.`;
+
+    let shots;
+    if (points.length === 3) {
+      const [, a, D] = points;
+      shots = [
+        `[0-${a}s] Medium-wide shot${sc.seat ? ", seated" : ""}, the set softly behind.`,
+        `[${a}-${D}s] Hard cut to face close-up, ending on a small, assured smile.`,
+      ];
+    } else {
+      const [, a, b, D] = points;
+      shots = [
+        `[0-${a}s] Wide shot, full body${sc.seat ? " seated" : ""}, the whole set in frame.`,
+        `[${a}-${b}s] Hard cut to medium close-up${sc.microphone ? ", microphone in the foreground" : ""}, hands gesturing as the architect explains an idea.`,
+        `[${b}-${D}s] Hard cut to face close-up, ending on a small, assured smile.`,
+      ];
+    }
+
+    const p6 = "Face, outfit and set stay identical in all cuts. No subtitles, no captions, no on-screen text, no logos.";
+    return [p1, p2, p3, p4, shots.join("\n"), p6].join("\n\n");
   }
 
   // Prompt boxes: each is written automatically until the user chooses to edit it.
   const PROMPT_BOXES = {
     character: { custom: "customCharacterPrompt", compose: characterPrompt, ta: "prompt-character", mode: "pmode-character", edit: "btn-customise-character", auto: "btn-auto-character" },
     set: { custom: "customSetPrompt", compose: setPrompt, ta: "prompt-set", mode: "pmode-set", edit: "btn-customise-set", auto: "btn-auto-set" },
-    frame: { custom: "customFramePrompt", compose: framePrompt, ta: "prompt-frame", mode: "pmode-frame", edit: "btn-customise-frame", auto: "btn-auto-frame" },
-    video: { custom: "customPrompt", compose: videoPrompt, ta: "prompt-video", mode: "pmode-video", edit: "btn-customise-video", auto: "btn-auto-video" },
+    video: { custom: "customPrompt", compose: composeVideoPrompt, ta: "prompt-video", mode: "pmode-video", edit: "btn-customise-video", auto: "btn-auto-video" },
   };
   const promptFor = (box) => (state[PROMPT_BOXES[box].custom] ?? PROMPT_BOXES[box].compose()).trim();
+
+  // ===========================================================================
+  // Reading the inputs (vision + transcription)
+  // ===========================================================================
+
+  function parseJsonLoose(text) {
+    if (typeof text !== "string") return null;
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try { return JSON.parse(m[0]); } catch { return null; }
+  }
+
+  async function runVision(prompt, imageUrl) {
+    let lastErr = null;
+    for (const model of VISION_MODELS) {
+      try {
+        const r = await runJob("vision", { model, prompt, image_urls: [imageUrl], temperature: 0.2, max_tokens: 500 }, null, 1200);
+        const parsed = parseJsonLoose(r?.output);
+        if (parsed) return parsed;
+        lastErr = new Error("The image description could not be read.");
+      } catch (err) {
+        if (err.missingKey) throw err;
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("The image could not be analysed.");
+  }
+
+  function track(slot, fn) {
+    let p = null;
+    p = (async () => {
+      try { await fn(); } finally {
+        if (pending[slot] === p) pending[slot] = null;
+        save();
+        render();
+      }
+    })();
+    pending[slot] = p;
+    render();
+    return p;
+  }
+
+  function analyseCharacter() {
+    const url = state.characterUrl;
+    if (!url || !hasCredentials()) return null;
+    return track("character", async () => {
+      try {
+        const j = await runVision(CHARACTER_VISION_PROMPT, url);
+        if (state.characterUrl !== url) return;
+        const info = {
+          for: url,
+          layout: String(j.layout || "").toLowerCase() === "photo" ? "photo" : "sheet",
+          face: clean(j.face, 180),
+          outfit: clean(j.outfit, 320),
+        };
+        state.characterInfo = info.face || info.outfit ? info : { for: url, failed: true };
+      } catch (err) {
+        console.warn("Character analysis failed:", err);
+        if (state.characterUrl === url) state.characterInfo = { for: url, failed: true };
+      }
+    });
+  }
+
+  function analyseScene() {
+    const url = state.backgroundUrl;
+    if (!url || !hasCredentials()) return null;
+    return track("scene", async () => {
+      try {
+        const j = await runVision(SCENE_VISION_PROMPT, url);
+        if (state.backgroundUrl !== url) return;
+        const info = {
+          for: url,
+          setting: clean(j.setting, 220),
+          seat: clean(j.seat, 120),
+          microphone: j.microphone === true || /^(true|yes)$/i.test(String(j.microphone)),
+          lighting: clean(j.lighting, 110),
+        };
+        state.sceneInfo = info.setting || info.seat ? info : { for: url, failed: true };
+      } catch (err) {
+        console.warn("Set analysis failed:", err);
+        if (state.backgroundUrl === url) state.sceneInfo = { for: url, failed: true };
+      }
+    });
+  }
+
+  function transcribeAudio() {
+    const url = state.audio?.url;
+    if (!url || !hasCredentials()) return null;
+    return track("transcript", async () => {
+      try {
+        const r = await runJob("transcribe", { audio_url: url, task: "transcribe", chunk_level: "segment" }, null, 1200);
+        if (state.audio?.url !== url) return;
+        const chunks = (Array.isArray(r?.chunks) ? r.chunks : []).slice(0, 200).map((c) => ({
+          timestamp: Array.isArray(c?.timestamp) ? c.timestamp.slice(0, 2) : null,
+          text: String(c?.text || "").trim(),
+        }));
+        state.transcript = {
+          for: url,
+          text: String(r?.text || "").trim(),
+          chunks,
+          language: Array.isArray(r?.inferred_languages) ? r.inferred_languages[0] || null : null,
+        };
+      } catch (err) {
+        console.warn("Transcription failed:", err);
+        if (state.audio?.url === url) state.transcript = { for: url, failed: true };
+      }
+    });
+  }
+
+  /** Reads any input that has not been read yet (after a reload or once a key is added). */
+  function refreshAnalyses(force = false) {
+    if (!hasCredentials()) return;
+    if (state.characterUrl && !pending.character && (force || state.characterInfo?.for !== state.characterUrl)) analyseCharacter();
+    if (state.backgroundUrl && !pending.scene && (force || state.sceneInfo?.for !== state.backgroundUrl)) analyseScene();
+    if (state.audio?.url && !pending.transcript && (force || state.transcript?.for !== state.audio.url)) transcribeAudio();
+  }
 
   // ===========================================================================
   // Media helpers
@@ -655,11 +852,12 @@
       );
       const url = r?.images?.[0]?.url;
       if (!url) throw new Error("No image came back. Please try again.");
-      Object.assign(state, { characterUrl: url, characterSource: "generated", characterLook: look });
+      Object.assign(state, { characterUrl: url, characterSource: "generated", characterLook: look, characterInfo: null });
       save();
       setStatus("status-character", "Character sheet ready.", "ok");
+      analyseCharacter();
     } catch (err) {
-      setStatus("status-character", friendlyImageError(err), "error");
+      setStatus("status-character", err.message, "error");
     } finally {
       setBusy("character", null);
       render();
@@ -675,9 +873,10 @@
     render();
     try {
       const { url } = await uploadFile(file);
-      Object.assign(state, { characterUrl: url, characterSource: "uploaded", characterLook: null });
+      Object.assign(state, { characterUrl: url, characterSource: "uploaded", characterLook: null, characterInfo: null });
       save();
       setStatus("status-character", "Character sheet added.", "ok");
+      analyseCharacter();
     } catch (err) {
       setStatus("status-character", err.message, "error");
     } finally {
@@ -692,6 +891,12 @@
     const fmt = FORMATS[state.format];
     const useRef = state.useReference;
     const prompt = promptFor("set");
+    const read = {
+      setting: SET_STYLES[state.setStyle].setting,
+      seat: `${chairName()} in the centre`,
+      microphone: true,
+      lighting: LIGHTS[state.light].short,
+    };
     setStatus("status-set", "");
     setBusy("background", useRef ? "Preparing the framing reference…" : "Creating the studio set…");
     render();
@@ -706,11 +911,14 @@
       });
       const url = r?.images?.[0]?.url;
       if (!url) throw new Error("No image came back. Please try again.");
-      Object.assign(state, { backgroundUrl: url, backgroundSource: "generated", backgroundAspect: fmt.aspect });
+      Object.assign(state, {
+        backgroundUrl: url, backgroundSource: "generated", backgroundAspect: fmt.aspect, backgroundRead: read, sceneInfo: null,
+      });
       save();
       setStatus("status-set", "Studio set ready.", "ok");
+      analyseScene();
     } catch (err) {
-      setStatus("status-set", friendlyImageError(err), "error");
+      setStatus("status-set", err.message, "error");
     } finally {
       setBusy("background", null);
       render();
@@ -728,67 +936,16 @@
       const size = await imageSize(file);
       const { url } = await uploadFile(file);
       Object.assign(state, {
-        backgroundUrl: url, backgroundSource: "uploaded",
+        backgroundUrl: url, backgroundSource: "uploaded", backgroundRead: null, sceneInfo: null,
         backgroundAspect: (size && nearestAspect(size.w, size.h)) || FORMATS[state.format].aspect,
       });
       save();
       setStatus("status-set", "Studio set added.", "ok");
+      analyseScene();
     } catch (err) {
       setStatus("status-set", err.message, "error");
     } finally {
       setBusy("background", null);
-      render();
-    }
-  }
-
-  async function generateFrame() {
-    if (busy.frame) return;
-    if (!state.characterUrl || !state.backgroundUrl) return setStatus("status-frame", "Add the character sheet and the set first.", "error");
-    if (!ensureKey(generateFrame)) return;
-    const aspect = frameAspect();
-    const used = { character: state.characterUrl, background: state.backgroundUrl };
-    setStatus("status-frame", "");
-    setBusy("frame", "Placing the architect in the set…");
-    render();
-    try {
-      const r = await runJob(
-        "imageEdit",
-        { prompt: promptFor("frame"), image_urls: [used.background, used.character], aspect_ratio: aspect, resolution: "2K", output_format: "png", num_images: 1 },
-        (s) => { setBusy("frame", `Placing the architect in the set, ${describe(s)}…`); renderBusy(); },
-      );
-      const url = r?.images?.[0]?.url;
-      if (!url) throw new Error("No image came back. Please try again.");
-      Object.assign(state, { frameUrl: url, frameSource: "generated", frameFor: used, frameAspect: aspect });
-      save();
-      setStatus("status-frame", "On-set photo ready. Check the face, outfit and chair before making the video.", "ok");
-    } catch (err) {
-      setStatus("status-frame", friendlyImageError(err), "error");
-    } finally {
-      setBusy("frame", null);
-      render();
-    }
-  }
-
-  async function onOwnFrame(file) {
-    if (!file.type.startsWith("image/")) return setStatus("status-frame", "Please choose an image file.", "error");
-    if (busy.frame) return setStatus("status-frame", "Please wait for the current step to finish.", "error");
-    if (!ensureKey(() => onOwnFrame(file))) return;
-    setStatus("status-frame", "");
-    setBusy("frame", "Uploading the photo…");
-    render();
-    try {
-      const size = await imageSize(file);
-      const { url } = await uploadFile(file);
-      Object.assign(state, {
-        frameUrl: url, frameSource: "uploaded", frameFor: null,
-        frameAspect: (size && nearestAspect(size.w, size.h)) || frameAspect(),
-      });
-      save();
-      setStatus("status-frame", "On-set photo added.", "ok");
-    } catch (err) {
-      setStatus("status-frame", err.message, "error");
-    } finally {
-      setBusy("frame", null);
       render();
     }
   }
@@ -846,8 +1003,10 @@
       }
 
       state.audio = { url, name: file.name || "recording.mp4", duration: secs || null, format };
+      state.transcript = null;
       save();
-      setStatus("status-voice", "Voice track ready.", "ok");
+      setStatus("status-voice", "Voice track ready. Clip length and camera cuts now follow it.", "ok");
+      transcribeAudio();
     } catch (err) {
       setStatus("status-voice", err.message, "error");
     } finally {
@@ -856,35 +1015,45 @@
     }
   }
 
-  function friendlyImageError(err) {
-    const m = err?.message || String(err);
-    if (REFUSAL.test(m)) return `The image model refused this request, possibly because of a photo of a real person. Try again, or upload your own image instead. Details: ${m}`;
-    return m;
-  }
+  // Seedance refuses reference images that show a real, identifiable person.
+  const REAL_PERSON = /likeness|real (people|person|human)|privacy|PrivacyInformation/i;
 
   function friendlyVideoError(err) {
     const m = err?.message || String(err);
-    if (REFUSAL.test(m)) {
-      return `This video model refused the photo, most likely because it shows a real person. Choose another video model above and try again. Details: ${m}`;
+    if (REAL_PERSON.test(m)) {
+      return "Seedance 2.5 refused the images because the character sheet shows a real person's face. " +
+        "Seedance only accepts real people through ByteDance's own verified-portrait programme, which fal.ai does not offer, " +
+        "so trying again with the same sheet will fail the same way. Use a character sheet of a person who is not a real, identifiable individual. " +
+        `Details: ${m}`;
     }
-    if (/audio_url/i.test(m)) return `The video model could not read the voice track. Please add the recording again in step 4. Details: ${m}`;
-    if (/image_url/i.test(m)) return `The video model could not read the on-set photo. Create or upload it again in step 3. Details: ${m}`;
+    if (/audio_urls|video_urls/i.test(m)) return `The video model could not read the voice track. Please add the recording again in step 3. Details: ${m}`;
+    if (/image_urls/i.test(m)) return `The video model could not read one of the images. Try adding it again as a JPG or PNG. Details: ${m}`;
     return m;
   }
 
   async function createEpisode() {
-    if (!(state.frameUrl && state.audio?.url) || busy.video) return;
-    if (!state.consent) return setStatus("status-video", "Please confirm you have the consent of the person shown.", "error");
+    if (!(state.characterUrl && state.backgroundUrl && state.audio?.url) || busy.video) return;
     if (!ensureKey(createEpisode)) return;
-    const model = VIDEO_MODELS[state.videoModel];
     setStatus("status-video", "");
-    setBusy("video", "Sending to the video model…", "prompt");
+    setBusy("video", "Finishing the prompt…", "prompt");
     render();
     try {
-      const input = model.input(state.frameUrl, state.audio.url, promptFor("video"));
-      const job = await submitJob(model.kind, input);
-      const meta = { aspect: state.frameAspect || frameAspect(), model: state.videoModel, duration: audioSeconds() };
-      state.videoJob = { ...job, startedAt: Date.now(), meta };
+      refreshAnalyses();
+      await Promise.allSettled(Object.values(pending).filter(Boolean));
+      const D = clipDuration();
+      const aspect = state.backgroundAspect || FORMATS[state.format].aspect;
+      const input = {
+        prompt: promptFor("video"),
+        image_urls: [state.characterUrl, state.backgroundUrl],
+        audio_urls: [state.audio.url],
+        aspect_ratio: aspect,
+        resolution: state.quality,
+        duration: D ? String(D) : "auto",
+      };
+      setBusy("video", "Sending to the video model…", "queue");
+      renderProgress();
+      const job = await submitJob("video", input);
+      state.videoJob = { ...job, startedAt: Date.now(), meta: { aspect, resolution: state.quality, duration: D } };
       save();
     } catch (err) {
       setStatus("status-video", friendlyVideoError(err), "error");
@@ -1034,7 +1203,7 @@
   }
 
   function renderBusy() {
-    const map = { character: "busy-character", background: "busy-set", frame: "busy-frame", audio: "busy-voice" };
+    const map = { character: "busy-character", background: "busy-set", audio: "busy-voice" };
     for (const [key, id] of Object.entries(map)) {
       const el = $(id);
       const b = busy[key];
@@ -1138,21 +1307,7 @@
     $("btn-own-set").textContent = state.backgroundUrl && state.backgroundSource === "uploaded" ? "Replace set image" : "Choose set image";
     renderPromptBox("set");
 
-    // ---- Step 3: on set ----
-    const haveInputs = Boolean(state.characterUrl && state.backgroundUrl);
-    setImg($("img-frame"), state.frameUrl);
-    $("ph-frame").hidden = Boolean(state.frameUrl);
-    const fAspect = state.frameUrl ? state.frameAspect : frameAspect();
-    $("media-frame").classList.toggle("media-tall", isPortrait(fAspect));
-    $("media-frame").classList.toggle("media-wide", !isPortrait(fAspect));
-    $("btn-frame").disabled = Boolean(busy.frame) || !haveInputs || Boolean(busy.character) || Boolean(busy.background);
-    $("btn-frame").textContent = state.frameUrl && state.frameSource === "generated" ? "Create again" : "Create on-set photo";
-    $("btn-own-frame").disabled = Boolean(busy.frame);
-    $("frame-stale").hidden = !frameIsStale();
-    $("hint-frame").textContent = haveInputs ? "" : `Still needed: ${[!state.characterUrl && "character sheet", !state.backgroundUrl && "studio set"].filter(Boolean).join(", ")}.`;
-    renderPromptBox("frame");
-
-    // ---- Step 4: voice ----
+    // ---- Step 3: voice ----
     const a = state.audio;
     $("drop-voice").hidden = Boolean(a);
     $("voice-panel").hidden = !a;
@@ -1161,52 +1316,78 @@
     if (a) {
       $("voice-name").textContent = a.name;
       const secs = audioSeconds();
-      $("voice-meta").textContent = [secs ? fmtSec(secs) : null, "voice track ready"].filter(Boolean).join(" · ");
+      const lang = transcriptReady() ? LANGUAGES[state.transcript.language] : null;
+      $("voice-meta").textContent = [secs ? fmtSec(secs) : null, lang, "voice track ready"].filter(Boolean).join(" · ");
       const audioEl = $("voice-audio");
       if (audioEl.getAttribute("src") !== a.url) audioEl.src = a.url;
-      $("voice-transcript").hidden = true;
+      let line = "";
+      if (pending.transcript) line = "Listening to the recording to place the camera cuts…";
+      else if (transcriptReady() && state.transcript.text) {
+        const t = state.transcript.text;
+        line = `“${t.length > 180 ? `${t.slice(0, 180).replace(/\s+\S*$/, "")}…` : t}”`;
+      } else if (state.transcript?.failed) line = "The recording could not be transcribed. Cuts are spaced evenly instead.";
+      $("voice-transcript").textContent = line;
+      $("voice-transcript").hidden = !line;
     }
 
     renderBusy();
 
-    // ---- Step 5: episode ----
-    const model = VIDEO_MODELS[state.videoModel];
-    updateChips("chips-model", state.videoModel, Boolean(busy.video));
-    for (const b of $("chips-model").querySelectorAll(".chip")) b.title = VIDEO_MODELS[b.dataset.value].name;
-    $("opt-consent").checked = Boolean(state.consent);
-    $("opt-consent").disabled = Boolean(busy.video);
+    // ---- Step 4: episode ----
+    updateChips("chips-quality", state.quality, Boolean(busy.video));
+    const ch = characterDetails();
+    const sc = sceneDetails();
+    const D = clipDuration();
+    const cuts = currentCuts();
 
-    setIngredient("ing-frame", !state.frameUrl
-      ? { thumb: null, text: "Waiting for the on-set photo", stateClass: busy.frame ? "is-busy" : "is-wait" }
-      : frameIsStale()
-        ? { thumb: state.frameUrl, text: "Made from an earlier sheet or set. Create it again in step 3 to update it.", stateClass: "is-warn" }
-        : { thumb: state.frameUrl, text: state.frameSource === "uploaded" ? "Your own photo" : "The architect seated in the set", stateClass: "is-done" });
-    const secs = audioSeconds();
+    setIngredient("ing-character", !state.characterUrl
+      ? { thumb: null, text: "Waiting for the character sheet", stateClass: busy.character ? "is-busy" : "is-wait" }
+      : pending.character
+        ? { thumb: state.characterUrl, text: "Reading the face and outfit…", stateClass: "is-busy" }
+        : ch.source === "analysis"
+          ? { thumb: state.characterUrl, text: ch.outfit ? `Outfit read from the sheet: ${ch.outfit}` : "Face and outfit read from the sheet", stateClass: "is-done" }
+          : ch.source === "preset"
+            ? { thumb: state.characterUrl, text: `Outfit from the ${LOOKS[state.characterLook].label} look`, stateClass: "is-done" }
+            : { thumb: state.characterUrl, text: "Described in general terms. The sheet could not be read.", stateClass: "is-warn" });
+
+    setIngredient("ing-set", !state.backgroundUrl
+      ? { thumb: null, text: "Waiting for the studio set", stateClass: busy.background ? "is-busy" : "is-wait" }
+      : pending.scene
+        ? { thumb: state.backgroundUrl, text: "Reading the seat, props and light…", stateClass: "is-busy" }
+        : sc.source === "analysis"
+          ? { thumb: state.backgroundUrl, text: sc.seat ? `Seat found: ${stripArticle(sc.seat)}` : "Set read, no chair found", stateClass: "is-done" }
+          : sc.source === "preset"
+            ? { thumb: state.backgroundUrl, text: "Described from your set choices", stateClass: "is-done" }
+            : { thumb: state.backgroundUrl, text: "Described in general terms. The set could not be read.", stateClass: "is-warn" });
+
+    const cutText = cuts.points.slice(1, -1).map((p) => `${p}s`).join(" and ");
     setIngredient("ing-voice", !a
       ? { text: "Waiting for the recording", stateClass: busy.audio ? "is-busy" : "is-wait" }
-      : { text: secs ? `${fmtSec(secs)}, the clip will be the same length` : "Ready", stateClass: "is-done" });
+      : pending.transcript
+        ? { text: "Listening for natural pauses…", stateClass: "is-busy" }
+        : { text: `${D || "?"}s clip, cuts at ${cutText}${cuts.snapped ? ", on natural pauses" : ""}`, stateClass: "is-done" });
 
-    $("fact-length").textContent = secs ? `${Math.round(secs * 10) / 10} seconds` : "Follows the recording";
-    $("fact-format").textContent = ASPECTS[state.frameAspect || frameAspect()] || state.frameAspect;
+    $("fact-length").textContent = D ? `${D} seconds` : "Follows the recording";
+    $("fact-format").textContent = ASPECTS[state.backgroundAspect || FORMATS[state.format].aspect];
 
-    const missing = [!state.frameUrl && "on-set photo", !a && "voice recording"].filter(Boolean);
-    const otherBusy = busy.character || busy.background || busy.frame || busy.audio;
+    const missing = [!state.characterUrl && "character sheet", !state.backgroundUrl && "studio set", !a && "voice recording"].filter(Boolean);
+    const otherBusy = busy.character || busy.background || busy.audio;
     const ready = missing.length === 0;
-    $("btn-episode").disabled = !ready || !state.consent || Boolean(busy.video) || Boolean(otherBusy);
+    $("btn-episode").disabled = !ready || Boolean(busy.video) || Boolean(otherBusy);
     $("btn-episode").textContent = state.result ? "Create a new clip" : "Create episode clip";
     $("hint-episode").textContent = busy.video
       ? "Your clip is being created below."
       : !ready
         ? `Still needed: ${missing.join(", ")}.`
-        : !state.consent
-          ? "Tick the consent box to continue."
-          : otherBusy
-            ? "Waiting for the current step to finish."
-            : `Uses fal.ai credits. Made with ${model.name}.`;
+        : otherBusy
+          ? "Waiting for the current step to finish."
+          : "Uses fal.ai credits. The prompt and camera cuts are already prepared.";
 
     renderPromptBox("video");
-    $("prompt-video-note").hidden = model.prompt;
-    $("prompt-video").disabled = !model.prompt;
+    const anyFailed =
+      (state.characterUrl && state.characterInfo?.for === state.characterUrl && state.characterInfo.failed) ||
+      (state.backgroundUrl && state.sceneInfo?.for === state.backgroundUrl && state.sceneInfo.failed) ||
+      (a && state.transcript?.for === a.url && state.transcript.failed);
+    $("btn-reread").hidden = !anyFailed;
 
     renderProgress();
 
@@ -1217,7 +1398,7 @@
       const v = $("video-result");
       if (v.getAttribute("src") !== r.url) v.src = r.url;
       $("link-open").href = r.url;
-      $("result-meta").textContent = [r.duration ? fmtSec(r.duration) : null, ASPECTS[r.aspect] || r.aspect, VIDEO_MODELS[r.model]?.name].filter(Boolean).join(" · ");
+      $("result-meta").textContent = [r.duration ? `${r.duration} seconds` : null, ASPECTS[r.aspect] || r.aspect, r.resolution].filter(Boolean).join(" · ");
       $("btn-retake").disabled = Boolean(busy.video) || !ready;
     }
 
@@ -1228,11 +1409,8 @@
     renderStep("set",
       busy.background ? "is-busy" : state.backgroundUrl ? "is-done" : state.characterUrl ? "is-next" : "",
       busy.background ? "Working…" : state.backgroundUrl ? "Ready" : "Upload or create");
-    renderStep("frame",
-      busy.frame ? "is-busy" : state.frameUrl ? (frameIsStale() ? "is-next" : "is-done") : state.characterUrl && state.backgroundUrl ? "is-next" : "",
-      busy.frame ? "Working…" : state.frameUrl ? (frameIsStale() ? "Out of date" : "Ready") : "Create the photo");
     renderStep("voice",
-      busy.audio ? "is-busy" : a ? "is-done" : state.frameUrl ? "is-next" : "",
+      busy.audio ? "is-busy" : a ? "is-done" : state.characterUrl && state.backgroundUrl ? "is-next" : "",
       busy.audio ? "Preparing…" : a ? fmtSec(audioSeconds()) : "Add an MP4");
     renderStep("episode",
       busy.video ? "is-busy" : r ? "is-done" : ready ? "is-next" : "",
@@ -1320,7 +1498,7 @@
     buildChips("chips-light", LIGHTS, "light");
     buildChips("chips-framing", FRAMINGS, "framing");
     buildChips("chips-format", FORMATS, "format");
-    buildChips("chips-model", VIDEO_MODELS, "videoModel");
+    buildChips("chips-quality", QUALITIES, "quality");
 
     for (const tab of document.querySelectorAll(".segmented button")) {
       tab.addEventListener("click", () => {
@@ -1378,17 +1556,7 @@
     bindDrop($("drop-voice"), $("file-voice"), onAudio, { target: $("media-voice") });
     $("btn-choose-voice").addEventListener("click", () => $("file-voice").click());
 
-    // Step 3
-    bindFileInput($("file-frame"), onOwnFrame);
-    $("btn-frame").addEventListener("click", generateFrame);
-    $("btn-own-frame").addEventListener("click", () => $("file-frame").click());
-
-    // Step 5
-    $("opt-consent").addEventListener("change", (e) => {
-      state.consent = e.target.checked;
-      save();
-      render();
-    });
+    // Step 4
     $("btn-episode").addEventListener("click", createEpisode);
     $("btn-retake").addEventListener("click", () => {
       createEpisode();
@@ -1396,6 +1564,10 @@
     });
     $("btn-download").addEventListener("click", downloadResult);
     for (const name of Object.keys(PROMPT_BOXES)) bindPromptBox(name);
+    $("btn-reread").addEventListener("click", () => {
+      if (!ensureKey(() => refreshAnalyses(true))) return;
+      refreshAnalyses(true);
+    });
     $("btn-copy").addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText($("prompt-video").value);
@@ -1414,7 +1586,7 @@
     $("btn-reset").addEventListener("click", () => {
       const msg = busy.video
         ? "A clip is still being created. Start over anyway?"
-        : "Clear the character, set, on-set photo, recording and clip, and start over? Your fal.ai key is kept.";
+        : "Clear the character, set, recording and clip, and start over? Your fal.ai key is kept.";
       if (!confirm(msg)) return;
       try { localStorage.removeItem(STATE_KEY); } catch { /* ignore */ }
       location.reload();
@@ -1437,6 +1609,7 @@
       const action = pendingKeyAction;
       pendingKeyAction = null;
       if (action) action();
+      refreshAnalyses();
     });
     $("input-key").addEventListener("keydown", (e) => {
       if (e.key === "Enter") $("btn-save-key").click();
@@ -1450,7 +1623,7 @@
     });
 
     window.addEventListener("beforeunload", (e) => {
-      if (busy.character || busy.background || busy.frame || busy.audio) {
+      if (busy.character || busy.background || busy.audio) {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -1481,13 +1654,14 @@
 
   bindEvents();
   render();
-  save(); // writes back any cleaned-up saved state
   if (audioMigrated) {
+    save();
     setStatus("status-voice", "Please add the recording again. It is now prepared as a clean voice track for the video model.");
   }
   detectBackend().then(() => {
     render();
     if (backend.mode === "direct" && !getKey()) openKeyPanel();
     if (state.videoJob) followVideo();
+    refreshAnalyses();
   });
 })();

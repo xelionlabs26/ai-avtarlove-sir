@@ -47,16 +47,15 @@
     <section class="hero">
       <p class="eyebrow">Podcast clip maker</p>
       <h1>The architect, the set and the voice.<br />One podcast clip.</h1>
-      <p class="lede">Upload what you already have, or create it here. Nothing is generated until you press a Create button, and the prompts are written for you.</p>
+      <p class="lede">Upload what you already have, or create it here. Nothing is generated until you press a Create button, and the video prompt and camera cuts are written for you.</p>
     </section>
 
     <nav class="stepper" aria-label="Progress">
       <ol>
         <li data-step="character"><a href="#step-character"><span class="step-dot">1</span><span class="step-text"><b>Architect</b><small></small></span></a></li>
         <li data-step="set"><a href="#step-set"><span class="step-dot">2</span><span class="step-text"><b>Studio set</b><small></small></span></a></li>
-        <li data-step="frame"><a href="#step-frame"><span class="step-dot">3</span><span class="step-text"><b>On set</b><small></small></span></a></li>
-        <li data-step="voice"><a href="#step-voice"><span class="step-dot">4</span><span class="step-text"><b>Voice</b><small></small></span></a></li>
-        <li data-step="episode"><a href="#step-episode"><span class="step-dot">5</span><span class="step-text"><b>Episode clip</b><small></small></span></a></li>
+        <li data-step="voice"><a href="#step-voice"><span class="step-dot">3</span><span class="step-text"><b>Voice</b><small></small></span></a></li>
+        <li data-step="episode"><a href="#step-episode"><span class="step-dot">4</span><span class="step-text"><b>Episode clip</b><small></small></span></a></li>
       </ol>
     </nav>
 
@@ -76,6 +75,7 @@
             <button type="button" role="tab" id="tab-char-upload" data-group="characterMode" data-mode="upload">I have a character sheet</button>
             <button type="button" role="tab" id="tab-char-create" data-group="characterMode" data-mode="create">Create one from a selfie</button>
           </div>
+          <p class="notice">Seedance 2.5 does not accept a character sheet that shows a real, identifiable person's face. Through fal.ai it refuses the video with a "likenesses of real people" message.</p>
 
           <div class="panel" id="panel-char-upload" role="tabpanel" aria-labelledby="tab-char-upload">
             <p class="panel-text">Upload a wide image with the face on the left and the full outfit on the right. Uploading is free.</p>
@@ -234,55 +234,10 @@
       </div>
     </section>
 
-    <!-- ===================== 3. ON SET ===================== -->
-    <section class="card step" id="step-frame" aria-labelledby="h-frame">
-      <header class="card-head">
-        <span class="num">3</span>
-        <div>
-          <h2 id="h-frame">On set</h2>
-          <p class="muted">One photo of the architect seated in the set's chair. This is the image the video model brings to life.</p>
-        </div>
-      </header>
-
-      <div class="step-grid">
-        <div class="step-controls">
-          <p class="panel-text">Made from the character sheet in step 1 and the set in step 2. Check the face, outfit and chair here before you spend credits on the video.</p>
-          <p class="notice" id="frame-stale" hidden>The character sheet or the set changed after this photo was made. Create it again to use the new ones.</p>
-          <details class="prompt-box" id="pbox-frame">
-            <summary><span>Image prompt</span><span class="pill pill-auto" id="pmode-frame">Written automatically</span></summary>
-            <textarea id="prompt-frame" rows="8" readonly spellcheck="false" aria-label="On-set photo prompt"></textarea>
-            <div class="prompt-actions">
-              <button class="btn btn-small" id="btn-customise-frame" type="button">Edit prompt</button>
-              <button class="btn btn-small" id="btn-auto-frame" type="button" hidden>Back to automatic</button>
-            </div>
-          </details>
-          <div class="actions">
-            <button class="btn btn-primary" id="btn-frame" type="button" disabled>Create on-set photo</button>
-            <span class="cost">Uses fal.ai credits</span>
-            <button class="btn btn-quiet" id="btn-own-frame" type="button">Upload my own</button>
-          </div>
-          <p class="hint" id="hint-frame"></p>
-          <p class="status" id="status-frame" role="status"></p>
-          <input type="file" id="file-frame" accept="image/*" hidden />
-        </div>
-
-        <div class="step-preview">
-          <div class="media media-tall" id="media-frame">
-            <img id="img-frame" alt="The architect seated in the set" hidden />
-            <div class="placeholder" id="ph-frame">
-              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 16v-6a6 6 0 0 1 12 0v6M4 23h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-              <p>The architect appears here, seated in the set, after you press Create.</p>
-            </div>
-            <div class="busy" id="busy-frame" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <!-- ===================== 3. VOICE ===================== -->
     <section class="card step" id="step-voice" aria-labelledby="h-voice">
       <header class="card-head">
-        <span class="num">4</span>
+        <span class="num">3</span>
         <div>
           <h2 id="h-voice">Voice</h2>
           <p class="muted">The architect's own voice as an MP4, 2 to 30 seconds. The video follows it word for word.</p>
@@ -295,7 +250,7 @@
             <li>Record in a quiet room with the phone close to the mouth.</li>
             <li>No background music. The voice is used exactly as recorded.</li>
             <li>The voice is taken out of the MP4 as a clean audio track, so a video or an audio-only MP4 both work.</li>
-            <li>The clip is exactly as long as the recording.</li>
+            <li>Clip length and camera cuts follow the recording automatically.</li>
           </ul>
           <div class="actions">
             <button class="btn btn-primary" id="btn-choose-voice" type="button">Choose MP4</button>
@@ -325,43 +280,44 @@
       </div>
     </section>
 
-    <!-- ===================== 5. EPISODE ===================== -->
+    <!-- ===================== 4. EPISODE ===================== -->
     <section class="card" id="step-episode" aria-labelledby="h-episode">
       <header class="card-head">
-        <span class="num">5</span>
+        <span class="num">4</span>
         <div>
           <h2 id="h-episode">Episode clip</h2>
-          <p class="muted">The architect from step 3 speaks the recording from step 4, lip-synced, in one continuous shot.</p>
+          <p class="muted">The prompt, clip length and camera cuts are written automatically from steps 1 to 3.</p>
         </div>
       </header>
 
       <div class="episode">
         <ul class="ingredients">
-          <li id="ing-frame">
+          <li id="ing-character">
             <span class="ing-thumb"><img alt="" hidden /></span>
-            <span class="ing-text"><b>On-set photo</b><small></small></span>
+            <span class="ing-text"><b>Character</b><small></small></span>
+            <span class="ing-state" aria-hidden="true"></span>
+          </li>
+          <li id="ing-set">
+            <span class="ing-thumb"><img alt="" hidden /></span>
+            <span class="ing-text"><b>Studio set</b><small></small></span>
             <span class="ing-state" aria-hidden="true"></span>
           </li>
           <li id="ing-voice">
             <span class="ing-thumb ing-thumb-voice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span>
-            <span class="ing-text"><b>Voice</b><small></small></span>
+            <span class="ing-text"><b>Voice and camera cuts</b><small></small></span>
             <span class="ing-state" aria-hidden="true"></span>
           </li>
         </ul>
 
         <div class="episode-side">
           <div class="field">
-            <span class="field-label" id="lbl-model">Video model</span>
-            <div class="chips chips-2" id="chips-model" role="radiogroup" aria-labelledby="lbl-model"></div>
+            <span class="field-label" id="lbl-quality">Quality</span>
+            <div class="chips chips-3" id="chips-quality" role="radiogroup" aria-labelledby="lbl-quality"></div>
           </div>
           <dl class="clip-facts">
             <div><dt>Length</dt><dd id="fact-length">–</dd></div>
             <div><dt>Format</dt><dd id="fact-format">–</dd></div>
           </dl>
-          <label class="consent">
-            <input type="checkbox" id="opt-consent" />
-            <span>I have the consent of the person shown to use their face and voice in this video.</span>
-          </label>
           <button class="btn btn-primary btn-xl" id="btn-episode" type="button" disabled>Create episode clip</button>
           <p class="hint" id="hint-episode"></p>
         </div>
@@ -374,24 +330,24 @@
           <span class="progress-time" id="progress-time"></span>
         </div>
         <ol class="progress-steps">
-          <li data-stage="prompt">Sending</li>
+          <li data-stage="prompt">Prompt</li>
           <li data-stage="queue">Queue</li>
           <li data-stage="render">Generating</li>
           <li data-stage="done">Done</li>
         </ol>
-        <p class="hint">This can take several minutes. If you reload the page, it reconnects to the same job.</p>
+        <p class="hint">This usually takes a few minutes. If you reload the page, it reconnects to the same job.</p>
       </div>
       <p class="status" id="status-video" role="status"></p>
 
       <details class="prompt-box" id="pbox-video">
         <summary><span>Video prompt</span><span class="pill pill-auto" id="pmode-video">Written automatically</span></summary>
-        <textarea id="prompt-video" rows="7" readonly spellcheck="false" aria-label="Video prompt"></textarea>
+        <textarea id="prompt-video" rows="14" readonly spellcheck="false" aria-label="Video prompt"></textarea>
         <div class="prompt-actions">
           <button class="btn btn-small" id="btn-customise-video" type="button">Edit prompt</button>
           <button class="btn btn-small" id="btn-auto-video" type="button" hidden>Back to automatic</button>
+          <button class="btn btn-small btn-quiet" id="btn-reread" type="button" hidden>Read the inputs again</button>
           <button class="btn btn-small btn-quiet" id="btn-copy" type="button">Copy</button>
         </div>
-        <p class="hint prompt-note" id="prompt-video-note" hidden>The selected model does not use a prompt. It animates the photo from the voice alone.</p>
       </details>
     </section>
 
@@ -410,7 +366,7 @@
           <button class="btn btn-primary" id="btn-download" type="button">Download MP4</button>
           <button class="btn" id="btn-retake" type="button">Create another take</button>
           <a class="btn btn-quiet" id="link-open" target="_blank" rel="noopener" href="#">Open in a new tab</a>
-          <p class="hint">Another take uses the same photo, voice and model and gives a new variation. It uses fal.ai credits.</p>
+          <p class="hint">Another take uses the same inputs and prompt and gives a new variation. It uses fal.ai credits.</p>
         </div>
       </div>
     </section>

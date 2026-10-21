@@ -103,7 +103,7 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
 /* ---------- stepper ---------- */
 .stepper { margin-bottom: 20px; }
 .stepper ol {
-  list-style: none; margin: 0; padding: 6px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+  list-style: none; margin: 0; padding: 6px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
 }
 .stepper a {
@@ -416,14 +416,4 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
 #prompt-video { min-height: 300px; }
 .panel .prompt-box textarea { min-height: 170px; }
 
-/* consent, notices */
-.consent {
-  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; cursor: pointer;
-  border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); font-size: 0.86rem; color: var(--text-2);
-}
-.consent input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); flex: 0 0 auto; }
 .notice { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: 0.86rem; }
-.prompt-note { padding: 0 16px 14px; }
-#prompt-video { min-height: 170px; }
-@media (max-width: 1020px) { .stepper ol { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 720px) { .stepper ol { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
