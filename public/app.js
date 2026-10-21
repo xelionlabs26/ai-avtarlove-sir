@@ -113,11 +113,10 @@
       label: "Talking-head",
       hint: "Close, like a clip",
       text:
-        "Framing like a talking-head podcast clip: medium close shot from about one and a half metres away, camera at seated chest height, straight on, with the chair turned slightly toward the left. " +
-        "The chair's backrest and both armrests fill the lower two-thirds of the frame and are cropped by the bottom edge at seat level. " +
-        "The curtains fill everything above the chair, with empty space where a seated person's head and shoulders would be. " +
-        "A black broadcast dynamic microphone on a black boom arm enters from the left edge of the frame and points toward the empty seat at mouth height, about 40 percent down from the top of the frame. " +
-        "Do not show the whole room, the floor or the ceiling.",
+        "Framed like a close talking-head podcast shot. Camera about one and a half metres from the chair, at seated chest height, straight on and very slightly looking down at the seat. " +
+        "The chair fills the lower half of the frame, placed right of centre and turned slightly to the left; its right armrest is cut off by the right edge of the frame and the front of the seat is cut off by the bottom edge. " +
+        "A black broadcast dynamic microphone on a black boom arm enters from the left edge at about 45 percent of the frame height and hangs straight down, so the microphone sits just above the top-left of the backrest, where a seated person's mouth would be. " +
+        "The upper half of the frame is background only, slightly soft with shallow depth of field, filling the frame behind the chair from edge to edge. No floor or ceiling visible.",
       noRoomRef: true,
     },
     wide: {
