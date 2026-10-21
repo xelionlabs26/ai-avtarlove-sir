@@ -698,7 +698,7 @@
     const p4 = `${Who} sits back in ${seatName} from @Image2, leaning back, relaxed and slightly slouched, knees apart and feet planted, ` +
       `body turned a little toward ${mic ? `the microphone, which sits close to ${sp.his} mouth without covering ${sp.his} lips` : "the camera"}. ` +
       `One forearm rests along the armrest${mic ? " by the microphone" : ""}; the other arm drapes over the far armrest with the hand hanging loosely over its front edge. ` +
-      `${Who} speaks in a calm, measured, serious conversational tone, as if answering an off-camera host, looking slightly to the side of the lens with only brief glances toward the camera. ` +
+      `${Who} speaks in a calm, measured, serious conversational tone, as if answering a host sitting just off-frame to camera-left. ${sp.His} eyes and face stay turned slightly to camera-left, toward the microphone side, for the whole clip and never look into the lens. ` +
       `${sp.His} mouth shapes every word clearly in sync with @Audio1. On key words ${sp.his} eyebrows lift, ${sp.his} head tilts or gives a slow nod, and the draped hand lifts a little with an open palm, then settles back. ` +
       `Between phrases ${who} pauses with ${sp.his} mouth closed, blinks slowly and sometimes briefly closes ${sp.his} eyes in thought. ` +
       `Movements stay small and natural: no big gestures, no exaggerated smiling.`;
