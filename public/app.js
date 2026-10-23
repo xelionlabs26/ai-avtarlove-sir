@@ -210,7 +210,10 @@
   const DEFAULTS = {
     characterMode: "upload", // "upload" | "create"
     speaker: "man",
-    look: "indowestern",
+    look: "indowestern", // outfit used when creating a sheet (kept in step with outfitId)
+    outfitId: null, // null = "Default (no outfit chosen)"
+    outfitCategory: "all",
+    libraryUploads: {}, // provider|path -> { url, at }: library files already uploaded
     characterNotes: "",
     customCharacterPrompt: null,
     selfieUrl: null,
@@ -254,6 +257,11 @@
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
   if (!PROVIDERS[state.provider]) state.provider = "kie";
+  // Before the outfit library, the chosen "Look" only affected new sheets. Carry a non-default look over once.
+  if (!saved.outfitsV) {
+    state.outfitId = saved.look && saved.look !== "indowestern" ? saved.look : null;
+    state.outfitsV = 1;
+  }
   if ((saved.setDefaultsV || 0) < 3) {
     Object.assign(state, { setStyle: "studio", chair: "velvet", light: "day", framing: "close", customSetPrompt: null, setDefaultsV: 3 });
   }
@@ -271,7 +279,6 @@
   const pending = { character: null, scene: null, transcript: null };
   const backend = { mode: "direct", models: DEFAULT_MODELS };
   let pendingKeyAction = null;
-  let referenceUrl = null;
 
   // The library: outfits and preset sets, loaded from library/*.json at start-up.
   const library = { outfits: [FALLBACK_OUTFIT], sets: [], loaded: false };
@@ -625,11 +632,49 @@
     library.outfits = sanitizeOutfits(o?.outfits) || [FALLBACK_OUTFIT];
     library.sets = sanitizeSets(sets?.sets);
     library.loaded = true;
-    if (!outfitById(state.look)) state.look = defaultOutfit().id;
+    if (state.outfitId && !outfitById(state.outfitId)) state.outfitId = null;
+    state.look = sheetOutfit().id;
   }
 
   const outfitById = (id) => library.outfits.find((o) => o.id === id) || null;
   const defaultOutfit = () => library.outfits.find((o) => o.default) || library.outfits[0] || FALLBACK_OUTFIT;
+  // The outfit a new character sheet is made with: the chosen one, or the default.
+  const sheetOutfit = () => outfitById(state.outfitId) || defaultOutfit();
+
+  /**
+   * How the chosen outfit reaches the video prompt:
+   *  - "sheet":        no outfit chosen (or "as in my photo"): the outfit comes from the sheet, as before.
+   *  - "sheet-chosen": the sheet was made in the app with the chosen outfit: name it from the library.
+   *  - "override":     the sheet shows other clothes (uploaded, made with another outfit, or a verified
+   *                    portrait): take only the face from @Image1 and dress the person in the chosen outfit,
+   *                    with its image as @Image3 when it has one.
+   */
+  function outfitPlan() {
+    const chosen = outfitById(state.outfitId);
+    if (!chosen || chosen.fromPhoto) return { mode: "sheet", outfit: null };
+    const madeWithIt = !assetRef() && state.characterSource === "generated" && state.characterLook === chosen.id;
+    if (madeWithIt) return { mode: "sheet-chosen", outfit: chosen };
+    return { mode: "override", outfit: chosen, image: chosen.image };
+  }
+
+  const UPLOAD_TTL = { kie: 12 * 3600e3, fal: 24 * 3600e3 };
+
+  /** Uploads a file shipped with the app (library image, framing reference) once per provider and reuses the link. */
+  async function libraryUpload(path) {
+    const key = `${state.provider}|${backend.mode}|${path}`;
+    const hit = state.libraryUploads?.[key];
+    if (hit?.url && Date.now() - hit.at < UPLOAD_TTL[state.provider]) return hit.url;
+    let res;
+    try { res = await fetch(path); } catch { res = null; }
+    if (!res?.ok) throw new Error(`The library file ${path.split("/").pop()} could not be loaded.`);
+    const blob = await res.blob();
+    const name = path.split("/").pop() || "library-file";
+    const { url } = await uploadFile(new File([blob], name, { type: blob.type || "image/jpeg" }));
+    const entries = Object.entries({ ...(state.libraryUploads || {}), [key]: { url, at: Date.now() } });
+    state.libraryUploads = Object.fromEntries(entries.slice(-40));
+    save();
+    return url;
+  }
   const setById = (id) => library.sets.find((x) => x.id === id) || null;
 
   // ===========================================================================
@@ -637,12 +682,20 @@
   // ===========================================================================
 
   function characterPrompt() {
-    const look = outfitById(state.look) || defaultOutfit();
-    const outfit = look.prompt && !look.fromPhoto
-      ? `the full outfit as a ghost mannequin, front view, head to toe: ${look.prompt}`
-      : "the full outfit as a ghost mannequin, front view, head to toe: the same clothes the person wears in the photo, completed naturally into a smart full outfit with matching trousers and footwear";
+    const look = sheetOutfit();
+    const withImage = Boolean(look.image && !look.fromPhoto);
+    let outfit;
+    if (look.fromPhoto || !look.prompt) {
+      outfit = "the full outfit as a ghost mannequin, front view, head to toe: the same clothes the person wears in the photo, completed naturally into a smart full outfit with matching trousers and footwear";
+    } else if (withImage) {
+      outfit = `the outfit from the second image as a ghost mannequin, front view, head to toe: ${look.prompt}. Copy only the clothes from the second image, not any person, mannequin or background in it`;
+    } else {
+      outfit = `the full outfit as a ghost mannequin, front view, head to toe: ${look.prompt}`;
+    }
     return [
-      "Use the uploaded photo for the face. Create one wide 16:9 character sheet on a plain white background.",
+      withImage
+        ? "Use the first image (the photo) for the face. Create one wide 16:9 character sheet on a plain white background."
+        : "Use the uploaded photo for the face. Create one wide 16:9 character sheet on a plain white background.",
       "LEFT side: close-up studio portrait of this exact person, with the same face, hair, facial hair, glasses (if any) and skin tone. Do not change age, face shape or features. Calm, confident and approachable expression.",
       `RIGHT side: ${outfit}.`,
       notes(state.characterNotes),
@@ -752,9 +805,21 @@
     const facial = sp.noun === "man" && !/clean[- ]?shaven/i.test(ch.face || "") ? "beard" : "facial hair";
     const trim = (t) => (t || "").replace(/[.\s]+$/, "");
 
-    // 1. Who: face and outfit from the character sheet (or a verified portrait).
+    // 1. Who: face and outfit from the character sheet (or a verified portrait), and the chosen outfit.
+    const plan = outfitPlan();
     let p1;
-    if (ch.layout === "photo") {
+    if (plan.mode === "override") {
+      const facePart = ch.layout === "photo"
+        ? `@Image1 defines ${who}'s face, hair, ${facial} and skin tone. Use only the face from @Image1 and ignore the clothes in it.`
+        : `@Image1 defines ${who}'s face, hair, ${facial} and skin tone. Use only the face from the left side of @Image1 and ignore the clothes shown in it.`;
+      const wearPart = plan.image
+        ? `@Image3 defines the outfit ${who} wears: ${trim(plan.outfit.prompt)}. Use only the clothes from @Image3, not any person, mannequin or background in it.`
+        : `${Who} wears ${trim(plan.outfit.prompt)}.`;
+      p1 = `${facePart} ${wearPart} The output must contain only this one ${sp.noun}. Do not use the background of @Image1.`;
+    } else if (plan.mode === "sheet-chosen") {
+      p1 = `@Image1 defines ${who}'s face, hair, ${facial}, skin tone and full outfit. Use the face from the left side of the image and the outfit from the right side: ` +
+        `${trim(plan.outfit.prompt)}. The output must contain only this one ${sp.noun}. Do not use the white background of @Image1.`;
+    } else if (ch.layout === "photo") {
       p1 = `@Image1 defines ${who}'s face, hair, ${facial}, skin tone and full outfit${ch.outfit ? `: ${trim(ch.outfit)}` : ""}.` +
         ` The output must contain only this one ${sp.noun}. Do not use the background of @Image1.`;
     } else {
@@ -1065,14 +1130,7 @@
 
   const isPortrait = (aspect) => aspect === "9:16" || aspect === "3:4";
 
-  async function getReferenceUrl() {
-    if (referenceUrl) return referenceUrl;
-    const res = await fetch(REFERENCE_PATH);
-    if (!res.ok) throw new Error("The framing reference image could not be loaded.");
-    const file = new File([await res.blob()], "podcast-set-framing.jpg", { type: "image/jpeg" });
-    referenceUrl = (await uploadFile(file)).url;
-    return referenceUrl;
-  }
+  const getReferenceUrl = () => libraryUpload(REFERENCE_PATH);
 
   // ===========================================================================
   // Actions (nothing here runs on its own: every generation starts from a button)
@@ -1096,7 +1154,7 @@
       const { url } = await uploadFile(file);
       state.selfieUrl = url;
       save();
-      setStatus("status-character", "Selfie added. Choose a look, then press Create character sheet.", "ok");
+      setStatus("status-character", "Selfie added. Choose an outfit, then press Create character sheet.", "ok");
     } catch (err) {
       setStatus("status-character", err.message, "error");
     } finally {
@@ -1109,15 +1167,18 @@
     if (busy.character) return;
     if (!state.selfieUrl) return setStatus("status-character", "Add a selfie first.", "error");
     if (!ensureKey(generateCharacter)) return;
-    const look = state.look;
+    const outfit = sheetOutfit();
+    const look = outfit.id;
     const prompt = promptFor("character");
     setStatus("status-character", "");
     setBusy("character", "Creating the character sheet…");
     render();
     try {
+      const images = [state.selfieUrl];
+      if (outfit.image && !outfit.fromPhoto && state.customCharacterPrompt == null) images.push(await libraryUpload(outfit.image));
       const r = await runJob(
         "imageEdit",
-        { prompt, image_urls: [state.selfieUrl], aspect_ratio: "16:9", resolution: "2K", output_format: "png", num_images: 1 },
+        { prompt, image_urls: images, aspect_ratio: "16:9", resolution: "2K", output_format: "png", num_images: 1 },
         (s) => { setBusy("character", `Creating the character sheet, ${describe(s)}…`); renderBusy(); },
       );
       const url = r?.images?.[0]?.url;
@@ -1322,9 +1383,16 @@
       await Promise.allSettled(Object.values(pending).filter(Boolean));
       const D = clipDuration();
       const aspect = state.backgroundAspect || FORMATS[state.format].aspect;
+      const images = [characterInput(), state.backgroundUrl];
+      const plan = outfitPlan();
+      if (plan.mode === "override" && plan.image) {
+        setBusy("video", "Adding the outfit reference…", "prompt");
+        renderProgress();
+        images.push(await libraryUpload(plan.image));
+      }
       const input = {
         prompt: promptFor("video"),
-        image_urls: [characterInput(), state.backgroundUrl],
+        image_urls: images,
         audio_urls: [state.audio.url],
         aspect_ratio: aspect,
         resolution: state.quality,
@@ -1442,10 +1510,125 @@
     });
   }
 
-  function buildLookChips() {
-    const opts = {};
-    for (const o of library.outfits) opts[o.id] = { label: o.name, hint: o.hint };
-    buildChips("chips-look", opts, "look");
+  let outfitGridKey = "";
+
+  function visibleOutfits() {
+    return library.outfits.filter((o) => o.for.includes(state.speaker) || o.id === state.outfitId);
+  }
+
+  function outfitVisual(o) {
+    const v = document.createElement("span");
+    v.className = "outfit-visual";
+    if (o.image) {
+      const img = document.createElement("img");
+      img.src = o.image;
+      img.alt = "";
+      img.loading = "lazy";
+      v.appendChild(img);
+    } else if (o.fromPhoto) {
+      v.classList.add("is-icon");
+      v.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>';
+    } else if (o.colors?.length) {
+      v.classList.add("is-swatch");
+      for (const c of o.colors) {
+        const band = document.createElement("i");
+        band.style.background = c;
+        v.appendChild(band);
+      }
+    } else {
+      v.classList.add("is-icon");
+    }
+    return v;
+  }
+
+  function outfitCard(id, name, sub, visual) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "outfit-card";
+    b.setAttribute("role", "radio");
+    b.dataset.value = id;
+    b.appendChild(visual);
+    const t = document.createElement("span");
+    t.className = "outfit-text";
+    const n = document.createElement("b");
+    n.textContent = name;
+    const m = document.createElement("small");
+    m.textContent = sub;
+    t.append(n, m);
+    b.appendChild(t);
+    b.addEventListener("click", () => {
+      const next = id === "__default" ? null : id;
+      if (state.outfitId === next) return;
+      state.outfitId = next;
+      state.look = sheetOutfit().id;
+      save();
+      render();
+    });
+    return b;
+  }
+
+  /** Rebuilds the outfit grid when the library, speaker or filter changes; otherwise only updates the selection. */
+  function renderOutfits() {
+    const list = visibleOutfits();
+    const cats = [...new Set(list.map((o) => o.category))];
+    if (state.outfitCategory !== "all" && !cats.includes(state.outfitCategory)) state.outfitCategory = "all";
+    const shown = list.filter((o) => state.outfitCategory === "all" || o.category === state.outfitCategory);
+    const key = JSON.stringify([state.speaker, state.outfitCategory, shown.map((o) => o.id), defaultOutfit().id, cats]);
+    if (key !== outfitGridKey) {
+      outfitGridKey = key;
+      const filters = $("outfit-filters");
+      filters.innerHTML = "";
+      filters.hidden = cats.length < 2;
+      for (const c of ["all", ...cats]) {
+        const f = document.createElement("button");
+        f.type = "button";
+        f.className = "filter-chip";
+        f.dataset.value = c;
+        f.textContent = c === "all" ? "All" : c;
+        f.addEventListener("click", () => {
+          state.outfitCategory = c;
+          save();
+          render();
+        });
+        filters.appendChild(f);
+      }
+      const grid = $("outfit-grid");
+      grid.innerHTML = "";
+      const dv = document.createElement("span");
+      dv.className = "outfit-visual is-default";
+      dv.textContent = "Auto";
+      grid.appendChild(outfitCard("__default", "Default", `Uses ${defaultOutfit().name}`, dv));
+      for (const o of shown) grid.appendChild(outfitCard(o.id, o.name, o.hint || o.category, outfitVisual(o)));
+    }
+    for (const f of $("outfit-filters").querySelectorAll(".filter-chip")) f.setAttribute("aria-pressed", String(f.dataset.value === state.outfitCategory));
+    const selected = state.outfitId || "__default";
+    for (const b of $("outfit-grid").querySelectorAll(".outfit-card")) {
+      const on = b.dataset.value === selected;
+      b.setAttribute("aria-checked", String(on));
+      b.tabIndex = on ? 0 : -1;
+      b.disabled = Boolean(busy.character);
+    }
+    $("outfit-count").textContent = `${library.outfits.length} in the library`;
+
+    // Explain what the video will do when the sheet and the chosen outfit differ.
+    const plan = outfitPlan();
+    let note = "";
+    let canRecreate = false;
+    if (plan.mode === "override" && (state.characterUrl || assetRef())) {
+      const how = plan.image ? "using its photo as a reference" : "from its description";
+      if (assetRef()) note = `The video dresses the verified portrait in ${plan.outfit.name}, ${how}.`;
+      else if (state.characterSource === "generated") {
+        note = `The sheet was made with ${outfitById(state.characterLook)?.name || "another outfit"}. The video dresses the architect in ${plan.outfit.name}, ${how}.`;
+        canRecreate = Boolean(state.selfieUrl);
+      } else {
+        note = `The video dresses the architect in ${plan.outfit.name} instead of the clothes on the sheet, ${how}.`;
+        canRecreate = Boolean(state.selfieUrl);
+      }
+    }
+    $("outfit-notice").textContent = note;
+    $("outfit-notice").hidden = !note;
+    $("outfit-actions").hidden = !canRecreate;
+    $("btn-recreate-outfit").disabled = Boolean(busy.character);
   }
 
   function updateChips(containerId, value, disabled = false) {
@@ -1565,7 +1748,7 @@
     // ---- Step 1: architect ----
     renderTabs("characterMode", { upload: "panel-char-upload", create: "panel-char-create" });
     const createChar = state.characterMode === "create";
-    updateChips("chips-look", state.look, Boolean(busy.character));
+    renderOutfits();
     updateChips("chips-speaker", state.speaker, Boolean(busy.video));
     setImg($("img-selfie"), state.selfieUrl);
     $("selfie-empty").hidden = Boolean(state.selfieUrl);
@@ -1644,12 +1827,16 @@
     const D = clipDuration();
     const cuts = currentCuts();
 
+    const oPlan = outfitPlan();
+    const outfitNote = oPlan.mode === "override" ? `, wearing ${oPlan.outfit.name}` : "";
     setIngredient("ing-character", assetRef() && !state.characterUrl
-      ? { thumb: null, text: `Verified portrait ${assetRef()}`, stateClass: "is-done" }
+      ? { thumb: null, text: `Verified portrait ${assetRef()}${outfitNote}`, stateClass: "is-done" }
       : !state.characterUrl
       ? { thumb: null, text: "Waiting for the character sheet", stateClass: busy.character ? "is-busy" : "is-wait" }
       : pending.character
         ? { thumb: state.characterUrl, text: "Reading the face and outfit…", stateClass: "is-busy" }
+        : oPlan.mode !== "sheet"
+          ? { thumb: state.characterUrl, text: oPlan.mode === "override" ? `Face from the sheet${outfitNote}` : `Outfit: ${oPlan.outfit.name}`, stateClass: "is-done" }
         : ch.source === "analysis"
           ? { thumb: state.characterUrl, text: ch.outfit ? `Outfit read from the sheet: ${ch.outfit}` : "Face and outfit read from the sheet", stateClass: "is-done" }
           : ch.source === "preset"
@@ -1801,7 +1988,6 @@
 
   function bindEvents() {
     buildChips("chips-speaker", SPEAKERS, "speaker");
-    buildLookChips();
     buildChips("chips-style", SET_STYLES, "setStyle");
     buildChips("chips-chair", CHAIRS, "chair");
     buildChips("chips-light", LIGHTS, "light");
@@ -1834,6 +2020,11 @@
     });
     $("btn-own-character").addEventListener("click", () => $("file-character").click());
     $("btn-character").addEventListener("click", generateCharacter);
+    $("btn-recreate-outfit").addEventListener("click", () => {
+      state.characterMode = "create";
+      save();
+      generateCharacter();
+    });
     $("input-char-notes").value = state.characterNotes || "";
     $("input-char-notes").addEventListener("input", (e) => {
       state.characterNotes = e.target.value;
@@ -1990,7 +2181,6 @@
     setStatus("status-voice", "Please add the recording again. It is now prepared as a clean voice track for the video model.");
   }
   loadLibrary().then(() => {
-    buildLookChips();
     save();
     render();
   });

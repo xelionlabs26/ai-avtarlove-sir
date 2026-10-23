@@ -115,10 +115,7 @@
                 <p class="hint">A clear, front-facing photo in good light. Uploading the selfie is free.</p>
               </div>
             </div>
-            <div class="field">
-              <span class="field-label" id="lbl-look">Look</span>
-              <div class="chips" id="chips-look" role="radiogroup" aria-labelledby="lbl-look"></div>
-            </div>
+            <p class="hint">The sheet is made with the outfit chosen below.</p>
             <div class="field">
               <label class="field-label" for="input-char-notes">Anything to add or change (optional)</label>
               <input class="text-input" type="text" id="input-char-notes" placeholder="e.g. round black glasses, a dark green Nehru jacket" />
@@ -141,6 +138,20 @@
             <span class="field-label" id="lbl-speaker">Speaker</span>
             <div class="chips chips-3" id="chips-speaker" role="radiogroup" aria-labelledby="lbl-speaker"></div>
             <p class="hint">Used in the video prompt ("the man… his…").</p>
+          </div>
+          <div class="field" id="outfit-field">
+            <div class="field-head">
+              <span class="field-label" id="lbl-outfit">Outfit</span>
+              <span class="hint" id="outfit-count"></span>
+            </div>
+            <div class="filter-chips" id="outfit-filters" role="group" aria-label="Outfit categories"></div>
+            <div class="outfit-grid" id="outfit-grid" role="radiogroup" aria-labelledby="lbl-outfit"></div>
+            <p class="hint">Default keeps the outfit on the character sheet. A chosen outfit goes into the prompts automatically.</p>
+            <p class="notice" id="outfit-notice" hidden></p>
+            <div class="actions" id="outfit-actions" hidden>
+              <button class="btn" id="btn-recreate-outfit" type="button">Recreate sheet with this outfit</button>
+              <span class="cost">Uses kie.ai credits</span>
+            </div>
           </div>
           <div class="field asset-row" id="asset-row">
             <label class="field-label" for="input-asset">Verified portrait asset ID (optional)</label>
