@@ -608,8 +608,6 @@ body { padding-bottom: env(safe-area-inset-bottom); }
 .rec-level { width: 120px; height: 8px; overflow: hidden; border-radius: 999px; background: var(--surface-3); }
 .rec-level span { display: block; width: 0; height: 100%; background: var(--ok); transition: width 0.08s linear; }
 .tts-text { width: 100%; min-height: 120px; padding: 12px 14px; resize: vertical; line-height: 1.55; font-family: inherit; }
-.tts-voice-row { display: flex; align-items: center; gap: 8px; }
-.tts-voice-row select { flex: 1; min-width: 0; }
 .hint.is-warn { color: var(--warn); }
 @media (max-width: 640px) {
   .recorder .btn-record { flex: 1 1 100%; min-height: 50px; font-size: 0.98rem; }

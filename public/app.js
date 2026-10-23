@@ -14,6 +14,8 @@
     vision: "openrouter/router/vision",
     transcribe: "fal-ai/whisper",
     audioConvert: "fal-ai/ffmpeg-api/merge-audios",
+    tts: "fal-ai/elevenlabs/tts/multilingual-v2",
+    ttsExpressive: "fal-ai/elevenlabs/tts/eleven-v3",
   };
 
   // Vision models that read the character sheet and the set, tried in order.
@@ -140,14 +142,30 @@
     performance: { label: "Copy the performance", hint: "Movement and camera" },
     script: { label: "Use the script", hint: "Words to record" },
   };
-  // Typed words are spoken by ElevenLabs. "Natural" also returns word timing, which places the camera cuts.
+  // Typed words are spoken by ElevenLabs through the chosen provider (kie.ai or fal.ai), with the same key.
   const TTS_MODELS = {
-    multilingual: { label: "Natural", hint: "Multilingual v2", id: "eleven_multilingual_v2", timestamps: true },
-    v3: { label: "Expressive", hint: "Eleven v3", id: "eleven_v3", timestamps: false },
+    multilingual: { label: "Natural", hint: "Multilingual v2", kind: "tts" },
+    v3: { label: "Expressive", hint: "Eleven v3", kind: "ttsExpressive" },
   };
+  // ElevenLabs' standard voices: fal.ai takes the name, kie.ai the voice ID.
+  const TTS_VOICES = {
+    george: { name: "George", id: "JBFqnCBsd6RMkjVDRZzb", group: "male", hint: "British, warm" },
+    daniel: { name: "Daniel", id: "onwK4e9ZLuTAKqWW03F9", group: "male", hint: "British, steady" },
+    brian: { name: "Brian", id: "nPczCjzI2devNBz1zQrb", group: "male", hint: "American, deep" },
+    eric: { name: "Eric", id: "cjVigY5qzO86Huf0OWal", group: "male", hint: "American, friendly" },
+    roger: { name: "Roger", id: "CwhRBWXzGAHq8TQ4Fs17", group: "male", hint: "American, confident" },
+    chris: { name: "Chris", id: "iP95p4xoKVk53GoZ742B", group: "male", hint: "American, casual" },
+    will: { name: "Will", id: "bIHbv24MWmeRgasZH58o", group: "male", hint: "American, young" },
+    lily: { name: "Lily", id: "pFZP5JQG7iQjIQuC4Bku", group: "female", hint: "British, warm" },
+    alice: { name: "Alice", id: "Xb7hH8MSUJpSbSDYk0k2", group: "female", hint: "British, clear" },
+    sarah: { name: "Sarah", id: "EXAVITQu4vr4xnSDxMaL", group: "female", hint: "American, soft" },
+    matilda: { name: "Matilda", id: "XrExE9yKIg1WjnnlVkGX", group: "female", hint: "American, friendly" },
+    laura: { name: "Laura", id: "FGY2WhTYpPnrIDTdsKH5", group: "female", hint: "American, bright" },
+    river: { name: "River", id: "SAz9YHcvj6GT2YYXdXww", group: "neutral", hint: "American, calm" },
+  };
+  const TTS_VOICE_GROUPS = { male: "Male voices", female: "Female voices", neutral: "Neutral voice" };
+  const TTS_DEFAULT_VOICE = { man: "george", woman: "lily", person: "river" };
   const TTS_WORDS_PER_SEC = 2.6; // a calm speaking pace, for the length estimate
-  const TTS_VOICE_HINT = "To speak in the architect's own voice, add a clone of their voice in ElevenLabs (with their permission). It then shows at the top of this list.";
-  const ELEVEN_API = "https://api.elevenlabs.io";
 
   // Seedance 2.5 limits for reference videos. A clip used only for its script is never sent to Seedance, so only its
   // length counts, and only its sound is uploaded.
@@ -216,13 +234,15 @@
 
   // kie.ai: an alternative provider for the images and the Seedance 2.5 video.
   const KIE_KEY_STORAGE = "architect-podcast-studio:kie-key";
-  const ELEVEN_KEY_STORAGE = "architect-podcast-studio:elevenlabs-key";
   const KIE_API = "https://api.kie.ai";
   const KIE_UPLOAD = "https://kieai.redpandaai.co";
-  const KIE_MODELS = { image: "nano-banana-pro", imageEdit: "nano-banana-pro", video: "bytedance/seedance-2-5" };
+  const KIE_MODELS = {
+    image: "nano-banana-pro", imageEdit: "nano-banana-pro", video: "bytedance/seedance-2-5",
+    tts: "elevenlabs/text-to-speech-multilingual-v2", ttsExpressive: "elevenlabs/text-to-dialogue-v3",
+  };
   // Jobs that run on the provider the user picked. The rest (reading images, transcription,
   // audio conversion) are optional helpers that only run with fal.ai credentials.
-  const PROVIDER_KINDS = new Set(["image", "imageEdit", "video"]);
+  const PROVIDER_KINDS = new Set(["image", "imageEdit", "video", "tts", "ttsExpressive"]);
   const PROVIDERS = { kie: "kie.ai", fal: "fal.ai" };
 
   // ===========================================================================
@@ -274,8 +294,7 @@
 
     voiceMode: "upload", // "upload" | "record" | "tts"
     ttsText: "",
-    ttsVoiceId: null,
-    ttsVoiceName: null,
+    ttsVoice: null, // key of TTS_VOICES; null follows the Speaker choice
     ttsModel: "multilingual",
 
     provider: "kie", // "kie" | "fal"
@@ -292,6 +311,7 @@
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "record", "tts"].includes(state.voiceMode)) state.voiceMode = "upload";
+  if (!TTS_VOICES[state.ttsVoice]) state.ttsVoice = null;
   if (!["library", "upload", "create"].includes(state.setMode)) state.setMode = "library";
   // The set library is new: show it first unless a set is already in use.
   if (!saved.setLibraryV) {
@@ -324,8 +344,6 @@
   let keyCloseTimer = null;
   let refFile = null; // { id, file, preview }: the reference clip picked in this visit, kept in memory only
   const rec = { recorder: null, stream: null, started: 0, timer: null, meter: null }; // the recording in progress
-  const voices = { list: [], loading: false, error: null, loadedFor: null, pending: null }; // ElevenLabs voices of the saved key
-  let sampleAudio = null;
 
   // The library: outfits and preset sets, loaded from library/*.json at start-up.
   const library = { outfits: [FALLBACK_OUTFIT], sets: [], loaded: false };
@@ -405,12 +423,10 @@
   const readKey = (k) => { try { return (localStorage.getItem(k) || "").trim(); } catch { return ""; } };
   const getKey = () => readKey(KEY_STORAGE); // fal.ai
   const getKieKey = () => readKey(KIE_KEY_STORAGE);
-  const getElevenKey = () => readKey(ELEVEN_KEY_STORAGE);
   const writeKey = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* ignore */ } };
   // fal.ai is available through the local server or a key in this browser.
   const falReady = () => backend.mode === "server" || Boolean(getKey());
   const kieReady = () => Boolean(getKieKey());
-  const elevenReady = () => Boolean(getElevenKey());
   // The provider the user picked for images and video.
   const hasCredentials = () => (state.provider === "kie" ? kieReady() : falReady());
   const assetRef = () => {
@@ -484,6 +500,10 @@
 
   /** Converts the app's request (fal.ai field names) into a kie.ai createTask input. */
   function kieInput(kind, input) {
+    if (kind === "tts" || kind === "ttsExpressive") {
+      const voice = Object.values(TTS_VOICES).find((v) => v.name === input.voice)?.id || input.voice;
+      return kind === "tts" ? { text: input.text, voice, timestamps: true } : { dialogue: [{ text: input.text, voice }], stability: 0.5 };
+    }
     if (kind === "video") {
       const out = {
         prompt: input.prompt,
@@ -519,10 +539,15 @@
       throw Object.assign(new Error(msg), { status: 400 });
     }
     if (st !== "success") return { status: st === "generating" ? "IN_PROGRESS" : "IN_QUEUE", queuePosition: null };
-    let urls = [];
-    try { urls = JSON.parse(d.resultJson || "{}").resultUrls || []; } catch { /* malformed */ }
+    let out = {};
+    try { out = JSON.parse(d.resultJson || "{}") || {}; } catch { /* malformed */ }
+    const urls = Array.isArray(out.resultUrls) ? out.resultUrls : [];
     if (!urls.length) throw Object.assign(new Error("kie.ai finished the task without a file."), { status: 400 });
-    const result = job.kind === "video" ? { video: { url: urls[0] } } : { images: urls.map((url) => ({ url })) };
+    const result = job.kind === "video"
+      ? { video: { url: urls[0] } }
+      : job.kind === "tts" || job.kind === "ttsExpressive"
+        ? { audio: { url: urls[0] }, timestamps: out.timestamps || out.alignment || null }
+        : { images: urls.map((url) => ({ url })) };
     return { status: "COMPLETED", queuePosition: null, result };
   }
 
@@ -1229,17 +1254,17 @@
     return info;
   }
 
-  /** Falls back to the browser's video element for length and size when the header cannot be read. */
+  /** Falls back to the browser's video element for length and size when the header cannot be read (a file or a link). */
   function videoElementInfo(file) {
     return new Promise((resolve) => {
       const el = document.createElement("video");
-      const url = URL.createObjectURL(file);
+      const url = typeof file === "string" ? file : URL.createObjectURL(file);
       let settled = false;
       const done = (v) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        URL.revokeObjectURL(url);
+        if (url !== file) URL.revokeObjectURL(url);
         el.removeAttribute("src");
         resolve(v);
       };
@@ -1674,68 +1699,69 @@
     return [Math.max(0, first - Math.round(rate * 0.25)), Math.min(data.length, last + Math.round(rate * 0.4))];
   }
 
-  /** Builds the transcript from ElevenLabs' timing: one chunk per phrase, so the cuts can land on pauses. */
-  function transcriptFromAlignment(url, al, text) {
-    const chars = Array.isArray(al?.characters) ? al.characters : [];
-    const starts = al?.character_start_times_seconds || [];
-    const ends = al?.character_end_times_seconds || [];
+  /**
+   * Turns ElevenLabs timing into transcript chunks, one per phrase, so the cuts can land on pauses. Takes character
+   * alignment or a word list, in seconds or milliseconds. Null when there is no usable timing.
+   */
+  function timingChunks(timing) {
+    const al = timing?.characters ? timing : timing?.alignment?.characters ? timing.alignment : null;
+    let words = [];
+    if (al) {
+      const starts = al.character_start_times_seconds || [];
+      const ends = al.character_end_times_seconds || [];
+      let cur = null;
+      al.characters.forEach((ch, i) => {
+        const c = String(ch);
+        if (!c.trim()) { if (cur) words.push(cur); cur = null; return; }
+        cur = cur ? { ...cur, text: cur.text + c, end: Number(ends[i]) } : { text: c, start: Number(starts[i]), end: Number(ends[i]) };
+      });
+      if (cur) words.push(cur);
+    } else {
+      const list = Array.isArray(timing) ? timing : Array.isArray(timing?.words) ? timing.words : [];
+      words = list.map((w) => ({
+        text: String(w?.text ?? w?.word ?? "").trim(),
+        start: Number(w?.start ?? w?.start_time ?? w?.start_seconds),
+        end: Number(w?.end ?? w?.end_time ?? w?.end_seconds),
+      }));
+    }
+    words = words.filter((w) => w.text && Number.isFinite(w.start) && Number.isFinite(w.end));
+    if (!words.length) return null;
+    const scale = Math.max(...words.map((w) => w.end)) > 120 ? 1000 : 1; // milliseconds
     const chunks = [];
-    let cur = "";
-    let start = null;
-    let end = null;
-    for (let i = 0; i < chars.length; i++) {
-      const c = String(chars[i]);
-      if (start === null && c.trim()) start = Number(starts[i]);
-      cur += c;
-      if (c.trim()) end = Number(ends[i]);
-      if (/[.!?,;:…।]/.test(c) && cur.trim() && start !== null) {
-        chunks.push({ timestamp: [start, end], text: cur.trim() });
-        cur = "";
-        start = null;
+    let phrase = [];
+    for (const w of words) {
+      phrase.push(w);
+      if (/[.!?,;:…।]$/.test(w.text)) {
+        chunks.push({ timestamp: [phrase[0].start / scale, w.end / scale], text: phrase.map((x) => x.text).join(" ") });
+        phrase = [];
       }
     }
-    if (cur.trim() && start !== null) chunks.push({ timestamp: [start, end], text: cur.trim() });
-    return { for: url, text, chunks: chunks.slice(0, 200), language: null };
+    if (phrase.length) chunks.push({ timestamp: [phrase[0].start / scale, phrase.at(-1).end / scale], text: phrase.map((x) => x.text).join(" ") });
+    return chunks.slice(0, 200);
   }
 
   /**
-   * Makes the voice track from a recording or from ElevenLabs speech: decoded here, cut to the speech when asked,
-   * checked for length and uploaded as a mono WAV, the same as an uploaded MP4.
+   * Makes the voice track from a recording  /**
+   * Makes the voice track from a recording made in the app: decoded here, cut to the speech, checked for length and
+   * uploaded as a mono WAV, the same as an uploaded MP4.
    */
-  async function prepareVoice(blob, { name, fileName, source, trim = false, text = null, alignment = null }) {
+  async function prepareVoice(blob, { name, fileName }) {
     setStatus("status-voice", "");
     setBusy("audio", "Preparing the voice track…");
     render();
-    const kind = source === "tts" ? "speech" : "recording";
     try {
       let buffer = null;
-      try { buffer = await decodeAudio(blob); } catch (err) { console.warn("This browser could not decode the voice:", err); }
-      let url;
-      let secs;
-      let format;
-      if (buffer) {
-        const range = trim ? speechRange(buffer) : null;
-        secs = (range ? range[1] - range[0] : buffer.length) / buffer.sampleRate;
-        if (source === "recorded") secs = Math.min(secs, MAX_AUDIO); // a recording stops by itself at 30 seconds
-        checkVoiceLength(secs, kind);
-        const wav = encodeWav(buffer, MAX_AUDIO, ...(range || []));
-        setBusy("audio", "Uploading the voice track…");
-        renderBusy();
-        url = (await uploadFile(new File([wav], `${fileName.replace(/\.[^.]+$/, "")}-voice.wav`, { type: "audio/wav" }))).url;
-        format = "wav";
-      } else if (source === "tts") {
-        // ElevenLabs sends an MP3, which the video model also takes as it is.
-        secs = (await videoElementInfo(blob))?.duration || null;
-        checkVoiceLength(secs, kind);
-        setBusy("audio", "Uploading the voice track…");
-        renderBusy();
-        url = (await uploadFile(new File([blob], fileName, { type: "audio/mpeg" }))).url;
-        format = "mp3";
-      } else {
-        throw userError("This browser could not prepare the recording. Try Chrome or Safari, or upload an MP4.");
-      }
-      state.audio = { url, name, duration: secs || null, format, source, ...(text ? { text } : {}) };
-      state.transcript = alignment ? transcriptFromAlignment(url, alignment, text) : null;
+      try { buffer = await decodeAudio(blob); } catch (err) { console.warn("This browser could not decode the recording:", err); }
+      if (!buffer) throw userError("This browser could not prepare the recording. Try Chrome or Safari, or upload an MP4.");
+      const range = speechRange(buffer);
+      const secs = Math.min(MAX_AUDIO, (range ? range[1] - range[0] : buffer.length) / buffer.sampleRate); // it stops by itself at 30 s
+      checkVoiceLength(secs);
+      const wav = encodeWav(buffer, MAX_AUDIO, ...(range || []));
+      setBusy("audio", "Uploading the voice track…");
+      renderBusy();
+      const { url } = await uploadFile(new File([wav], `${fileName.replace(/\.[^.]+$/, "")}-voice.wav`, { type: "audio/wav" }));
+      state.audio = { url, name, duration: secs, format: "wav", source: "recorded" };
+      state.transcript = null;
       save();
       setStatus("status-voice", "Voice track ready. Clip length and camera cuts now follow it.", "ok");
       if (!state.transcript) transcribeAudio();
@@ -1804,7 +1830,7 @@
       return setStatus("status-voice", "Nothing was recorded. Check the microphone and try again.", "error");
     }
     const ext = /mp4/.test(blob.type) ? "m4a" : /ogg/.test(blob.type) ? "ogg" : "webm";
-    await prepareVoice(blob, { name: "Recorded in the app", fileName: `recording.${ext}`, source: "recorded", trim: true });
+    await prepareVoice(blob, { name: "Recorded in the app", fileName: `recording.${ext}` });
   }
 
   /** A small live level bar, so the speaker can see the microphone hears them. */
@@ -1846,68 +1872,6 @@
     $("rec-level-bar").style.width = "0%";
   }
 
-  /** Calls the ElevenLabs API with the key saved in this browser. */
-  async function elevenFetch(path, init = {}) {
-    let res;
-    try {
-      res = await fetch(`${ELEVEN_API}${path}`, { ...init, headers: { ...(init.headers || {}), "xi-api-key": getElevenKey() } });
-    } catch {
-      throw userError("This page could not reach ElevenLabs. Check the connection and try again. If it keeps failing, record the voice or upload an MP4 instead.");
-    }
-    if (res.ok) return res;
-    let body = null;
-    try { body = await res.json(); } catch { /* not JSON */ }
-    const d = body?.detail;
-    const msg = (Array.isArray(d) ? d.map((x) => x?.msg).filter(Boolean).join("; ") : typeof d === "string" ? d : d?.message) || `ElevenLabs error ${res.status}`;
-    if (res.status === 401) throw userError(`ElevenLabs did not accept the key. Check it in the key panel. (${msg})`);
-    if (res.status === 402 || /quota|credit/i.test(msg)) throw userError(`Your ElevenLabs account does not have enough credits for this. (${msg})`);
-    throw Object.assign(new Error(msg), { status: res.status });
-  }
-
-  /** Lists the voices in the ElevenLabs account: the user's own (clones and designed voices) first. Free. */
-  function loadVoices(force = false) {
-    const key = getElevenKey();
-    if (!key) return Promise.resolve();
-    if (voices.pending) return voices.pending;
-    if (!force && voices.loadedFor === key) return Promise.resolve();
-    voices.loading = true;
-    voices.error = null;
-    render();
-    voices.pending = fetchVoices(key);
-    return voices.pending;
-  }
-
-  async function fetchVoices(key) {
-    try {
-      let res;
-      try {
-        res = await elevenFetch("/v2/voices?page_size=100");
-      } catch (err) {
-        if (err.status !== 404 && err.status !== 405) throw err;
-        res = await elevenFetch("/v1/voices");
-      }
-      const body = await res.json();
-      if (getElevenKey() !== key) return; // the key was changed meanwhile
-      voices.list = (Array.isArray(body?.voices) ? body.voices : [])
-        .filter((v) => v?.voice_id && v?.name)
-        .map((v) => ({ id: String(v.voice_id), name: String(v.name).slice(0, 80), own: v.category !== "premade", preview: v.preview_url || null }))
-        .sort((x, y) => Number(y.own) - Number(x.own) || x.name.localeCompare(y.name));
-      voices.loadedFor = key;
-      if (!voices.list.some((v) => v.id === state.ttsVoiceId)) {
-        const v = voices.list[0] || null;
-        state.ttsVoiceId = v?.id || null;
-        state.ttsVoiceName = v?.name || null;
-        save();
-      }
-    } catch (err) {
-      voices.error = err.message;
-    } finally {
-      voices.loading = false;
-      voices.pending = null;
-      render();
-    }
-  }
-
   /** Rough speaking time of typed words, so a text that cannot fit one clip is caught before credits are spent. */
   function speechSeconds(text) {
     const words = (text.match(/\S+/g) || []).length;
@@ -1915,14 +1879,9 @@
     return words / TTS_WORDS_PER_SEC + stops * 0.3;
   }
 
-  function base64Blob(b64, type) {
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new Blob([bytes], { type });
-  }
+  const ttsVoiceKey = () => state.ttsVoice || TTS_DEFAULT_VOICE[state.speaker] || "george";
 
-  /** Speaks the typed words with the chosen ElevenLabs voice (uses ElevenLabs credits, only on the button). */
+  /** Speaks the typed words with an ElevenLabs voice on the chosen provider (uses its credits, only on the button). */
   async function createSpeech() {
     if (busy.audio || rec.recorder) return;
     const text = (state.ttsText || "").trim();
@@ -1930,42 +1889,30 @@
     const est = speechSeconds(text);
     if (est > MAX_AUDIO) return setStatus("status-voice", `This text takes about ${Math.round(est)} seconds to say. One clip is at most ${MAX_AUDIO} seconds, so please shorten it.`, "error");
     if (est < MIN_AUDIO) return setStatus("status-voice", `This text takes only about ${est.toFixed(1)} seconds to say. A clip needs at least ${MIN_AUDIO} seconds, so add a few words.`, "error");
-    if (!elevenReady()) {
-      // Load the voices once the key is saved, so the user picks one before any credits are spent.
-      pendingKeyAction = () => loadVoices();
-      setStatus("status-voice", "Add your ElevenLabs key, then choose a voice and press Create voice.");
-      return openKeyPanel("Add your ElevenLabs key. Your voices load right after you save.");
-    }
-    if (!state.ttsVoiceId) {
-      loadVoices();
-      return setStatus("status-voice", "Choose a voice first.", "error");
-    }
     if (!ensureKey(createSpeech)) return;
-    const model = TTS_MODELS[state.ttsModel] || TTS_MODELS.multilingual;
-    const voiceName = state.ttsVoiceName || "ElevenLabs voice";
+    const voice = TTS_VOICES[ttsVoiceKey()];
+    const kind = (TTS_MODELS[state.ttsModel] || TTS_MODELS.multilingual).kind;
     setStatus("status-voice", "");
-    setBusy("audio", "Creating the voice on ElevenLabs…");
+    setBusy("audio", `Creating the voice on ${PROVIDERS[state.provider]}…`);
     render();
-    let blob;
-    let alignment = null;
     try {
-      const path = `/v1/text-to-speech/${encodeURIComponent(state.ttsVoiceId)}${model.timestamps ? "/with-timestamps" : ""}?output_format=mp3_44100_128`;
-      const res = await elevenFetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, model_id: model.id }) });
-      if (model.timestamps) {
-        const r = await res.json();
-        if (!r?.audio_base64) throw new Error("ElevenLabs sent no audio. Please try again.");
-        blob = base64Blob(r.audio_base64, "audio/mpeg");
-        alignment = r.alignment || r.normalized_alignment || null;
-      } else {
-        blob = await res.blob();
-      }
+      const r = await runJob(kind, { text, voice: voice.name, timestamps: true }, null, 1500);
+      const url = r?.audio?.url || (typeof r?.audio === "string" ? r.audio : null);
+      if (!url) throw new Error("No audio came back. Please try again.");
+      const chunks = timingChunks(r?.timestamps);
+      const secs = (await videoElementInfo(url))?.duration || (chunks ? chunks.at(-1).timestamp[1] : null);
+      checkVoiceLength(secs, "speech");
+      state.audio = { url, name: `${voice.name} · ElevenLabs`, duration: secs || null, format: "mp3", source: "tts", text };
+      state.transcript = chunks ? { for: url, text, chunks, language: null } : null;
+      save();
+      setStatus("status-voice", "Voice track ready. Clip length and camera cuts now follow it.", "ok");
+      if (!state.transcript) transcribeAudio();
     } catch (err) {
-      setStatus("status-voice", err.message, "error");
+      setStatus("status-voice", err.userFacing ? err.message : `The voice could not be created. ${err.message}`, "error");
+    } finally {
       setBusy("audio", null);
       render();
-      return;
     }
-    await prepareVoice(blob, { name: `${voiceName} · ElevenLabs`, fileName: "speech.mp3", source: "tts", text, alignment });
   }
 
   /** Length, size and frame rate of a clip: from the file header, or from the browser when the header cannot be read. */
@@ -2490,35 +2437,18 @@
     $("tts-estimate").classList.toggle("is-warn", long || short);
 
     const sel = $("tts-voice");
-    const listKey = !elevenReady() ? "nokey" : voices.loading ? "loading" : voices.error ? "error" : `list:${voices.loadedFor === getElevenKey()}:${voices.list.length}`;
-    if (sel.dataset.key !== listKey) {
-      sel.dataset.key = listKey;
-      sel.innerHTML = "";
-      if (voices.list.length && listKey.startsWith("list")) {
-        for (const [label, own] of [["Your voices", true], ["ElevenLabs voices", false]]) {
-          const group = voices.list.filter((v) => v.own === own);
-          if (!group.length) continue;
-          const og = document.createElement("optgroup");
-          og.label = label;
-          for (const v of group) og.appendChild(new Option(v.name, v.id));
-          sel.appendChild(og);
-        }
-      } else {
-        const note = listKey === "nokey" ? "Add your ElevenLabs key to load your voices" : voices.loading ? "Loading your voices…" : voices.error ? "The voices could not be loaded" : "No voices in this account yet";
-        const o = new Option(note, "");
-        o.disabled = true;
-        o.selected = true;
-        sel.add(o);
+    if (!sel.options.length) {
+      for (const [group, label] of Object.entries(TTS_VOICE_GROUPS)) {
+        const og = document.createElement("optgroup");
+        og.label = label;
+        for (const [key, v] of Object.entries(TTS_VOICES)) if (v.group === group) og.appendChild(new Option(`${v.name} · ${v.hint}`, key));
+        sel.appendChild(og);
       }
     }
-    const voice = voices.list.find((v) => v.id === state.ttsVoiceId);
-    if (voice && sel.value !== voice.id) sel.value = voice.id;
-    sel.disabled = !voices.list.length || Boolean(busy.audio);
-    $("btn-tts-sample").disabled = !voice?.preview;
-    $("tts-voice-hint").textContent = voices.error ? `The voices could not be loaded: ${voices.error}` : TTS_VOICE_HINT;
-    $("tts-voice-hint").classList.toggle("is-warn", Boolean(voices.error));
+    if (sel.value !== ttsVoiceKey()) sel.value = ttsVoiceKey();
+    sel.disabled = Boolean(busy.audio);
+    $("tts-credits").textContent = `Uses ${PROVIDERS[state.provider]} credits, with the key you already added. Nothing is created until you press Create voice.`;
     updateChips("chips-tts-model", state.ttsModel, Boolean(busy.audio));
-    $("btn-eleven-key").hidden = elevenReady();
     $("btn-tts").disabled = Boolean(busy.audio) || Boolean(rec.recorder) || !text;
     $("btn-tts").textContent = state.audio?.source === "tts" && state.audio.text === text ? "Create again" : "Create voice";
   }
@@ -2868,7 +2798,6 @@
     $("key-panel").hidden = false;
     $("input-kie-key").value = getKieKey();
     $("input-fal-key").value = getKey();
-    $("input-eleven-key").value = getElevenKey();
     setStatus("status-key", message || "");
     renderKeyPill();
     (state.provider === "kie" ? $("input-kie-key") : backend.mode === "server" ? $("btn-save-key") : $("input-fal-key")).focus();
@@ -3027,7 +2956,6 @@
       state.voiceMode = "tts";
       save();
       render();
-      loadVoices();
       $("step-voice").scrollIntoView({ behavior: "smooth", block: "start" });
     });
     $("btn-copy-script").addEventListener("click", async () => {
@@ -3046,7 +2974,6 @@
     bindDrop($("drop-voice"), $("file-voice"), onAudio, { target: $("media-voice"), enabled: () => state.voiceMode === "upload" });
     $("btn-choose-voice").addEventListener("click", () => $("file-voice").click());
     $("btn-record").addEventListener("click", () => (rec.recorder ? stopRecording() : startRecording()));
-    $("tab-voice-tts").addEventListener("click", () => loadVoices());
     buildChips("chips-tts-model", TTS_MODELS, "ttsModel");
     $("tts-text").addEventListener("input", (e) => {
       state.ttsText = e.target.value;
@@ -3054,22 +2981,12 @@
       renderTts();
     });
     $("tts-voice").addEventListener("change", (e) => {
-      const v = voices.list.find((x) => x.id === e.target.value);
-      if (!v) return;
-      state.ttsVoiceId = v.id;
-      state.ttsVoiceName = v.name;
+      if (!TTS_VOICES[e.target.value]) return;
+      state.ttsVoice = e.target.value;
       save();
       render();
     });
-    $("btn-tts-sample").addEventListener("click", () => {
-      const v = voices.list.find((x) => x.id === state.ttsVoiceId);
-      if (!v?.preview) return;
-      sampleAudio = sampleAudio || new Audio();
-      sampleAudio.src = v.preview;
-      sampleAudio.play().catch(() => setStatus("status-voice", "The sample could not be played.", "error"));
-    });
     $("btn-tts").addEventListener("click", createSpeech);
-    $("btn-eleven-key").addEventListener("click", () => openKeyPanel("Add your ElevenLabs key to use your ElevenLabs voices."));
 
     // Step 5: episode
     $("btn-episode").addEventListener("click", createEpisode);
@@ -3125,12 +3042,6 @@
     $("btn-save-key").addEventListener("click", () => {
       writeKey(KIE_KEY_STORAGE, $("input-kie-key").value.trim());
       if (backend.mode !== "server") writeKey(KEY_STORAGE, $("input-fal-key").value.trim());
-      const elevenBefore = getElevenKey();
-      writeKey(ELEVEN_KEY_STORAGE, $("input-eleven-key").value.trim());
-      if (getElevenKey() !== elevenBefore) {
-        Object.assign(voices, { list: [], error: null, loadedFor: null, pending: null });
-        if (state.voiceMode === "tts") loadVoices();
-      }
       if (!hasCredentials()) {
         render();
         return setStatus("status-key", `Paste your ${PROVIDERS[state.provider]} key first.`, "error");
@@ -3143,7 +3054,7 @@
       if (action) action();
       refreshAnalyses();
     });
-    for (const id of ["input-kie-key", "input-fal-key", "input-eleven-key"]) {
+    for (const id of ["input-kie-key", "input-fal-key"]) {
       $(id).addEventListener("keydown", (e) => {
         if (e.key === "Enter") $("btn-save-key").click();
         if (e.key === "Escape") closeKeyPanel();
@@ -3152,11 +3063,8 @@
     $("btn-forget-key").addEventListener("click", () => {
       writeKey(KIE_KEY_STORAGE, "");
       writeKey(KEY_STORAGE, "");
-      writeKey(ELEVEN_KEY_STORAGE, "");
       $("input-kie-key").value = "";
       $("input-fal-key").value = "";
-      $("input-eleven-key").value = "";
-      Object.assign(voices, { list: [], error: null, loadedFor: null });
       setStatus("status-key", "Keys removed from this browser.", "ok");
       render();
     });
@@ -3207,7 +3115,7 @@
     save();
     render();
   });
-  if (state.voiceMode === "tts") loadVoices();
+  writeKey("architect-podcast-studio:elevenlabs-key", ""); // no longer used: speech runs on kie.ai or fal.ai
   detectBackend().then(() => {
     render();
     if (!hasCredentials()) openKeyPanel();

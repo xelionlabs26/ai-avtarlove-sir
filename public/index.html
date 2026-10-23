@@ -54,12 +54,6 @@
         <p class="hint" id="fal-key-hint">With kie.ai, a fal.ai key is optional. It lets the app read the images and the recording to write a sharper prompt. <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">Get a fal.ai key</a></p>
       </div>
 
-      <div class="field">
-        <label class="field-label" for="input-eleven-key">ElevenLabs API key (optional)</label>
-        <input class="text-input mono" type="password" id="input-eleven-key" placeholder="Paste your ElevenLabs key" autocomplete="off" spellcheck="false" />
-        <p class="hint">For "Type the words" in step 4: turns typed words into speech with your ElevenLabs voices. <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener">Get an ElevenLabs key</a></p>
-      </div>
-
       <div class="key-actions">
         <button class="btn btn-primary" id="btn-save-key" type="button">Save</button>
         <button class="btn btn-quiet" id="btn-forget-key" type="button">Remove keys</button>
@@ -339,7 +333,7 @@
                 <button class="btn btn-small btn-quiet" id="btn-copy-script" type="button" hidden>Copy script</button>
                 <button class="btn btn-small btn-quiet" id="btn-script-to-voice" type="button" hidden>Use for the voice</button>
               </div>
-              <p class="hint">Record these words in step 4 in the architect's own voice, or press Use for the voice to speak them with ElevenLabs. Reading the script uses a fal.ai key.</p>
+              <p class="hint">Record these words in step 4 in the architect's own voice, or press Use for the voice to have an ElevenLabs voice say them. Reading the script uses a fal.ai key.</p>
             </div>
           </div>
           <p class="status" id="status-ref" role="status"></p>
@@ -419,11 +413,8 @@
             </div>
             <div class="field">
               <label class="field-label" for="tts-voice">Voice</label>
-              <div class="tts-voice-row">
-                <select class="text-input" id="tts-voice"></select>
-                <button class="btn btn-small btn-quiet" id="btn-tts-sample" type="button">Play sample</button>
-              </div>
-              <p class="hint" id="tts-voice-hint"></p>
+              <select class="text-input" id="tts-voice"></select>
+              <p class="hint" id="tts-voice-hint">ElevenLabs voices, made with your kie.ai or fal.ai key. For the architect's own voice, use Record now.</p>
             </div>
             <div class="field">
               <span class="field-label" id="lbl-tts-model">Speech style</span>
@@ -431,9 +422,8 @@
             </div>
             <div class="actions">
               <button class="btn btn-primary" id="btn-tts" type="button">Create voice</button>
-              <button class="btn btn-quiet" id="btn-eleven-key" type="button">Add ElevenLabs key</button>
             </div>
-            <p class="hint">Uses ElevenLabs credits. Nothing is created until you press Create voice.</p>
+            <p class="hint" id="tts-credits"></p>
           </div>
 
           <p class="status" id="status-voice" role="status"></p>

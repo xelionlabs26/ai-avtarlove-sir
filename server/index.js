@@ -17,6 +17,8 @@ const MODELS = {
   vision: process.env.VISION_ENDPOINT || "openrouter/router/vision",
   transcribe: process.env.WHISPER_MODEL || "fal-ai/whisper",
   audioConvert: process.env.AUDIO_CONVERT_MODEL || "fal-ai/ffmpeg-api/merge-audios",
+  tts: process.env.TTS_MODEL || "fal-ai/elevenlabs/tts/multilingual-v2",
+  ttsExpressive: process.env.TTS_EXPRESSIVE_MODEL || "fal-ai/elevenlabs/tts/eleven-v3",
 };
 
 if (FAL_KEY) {

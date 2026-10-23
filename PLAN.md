@@ -29,8 +29,8 @@ backgrounds (see [What you add next](#what-you-add-next)).
 ### Added after the phases
 
 - **Voice, step 4:** besides uploading an MP4, the voice can be recorded in the app (microphone, stops at 30 seconds,
-  silence trimmed) or typed and spoken by ElevenLabs with a voice from the user's own ElevenLabs account. ElevenLabs is
-  optional and uses its own key and credits, only when **Create voice** is pressed.
+  silence trimmed) or typed and spoken by a standard ElevenLabs voice. The speech runs on kie.ai or fal.ai with the
+  key already added, and only when **Create voice** is pressed.
 
 ## Starting point (before Phase 0)
 
