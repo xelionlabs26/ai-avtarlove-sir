@@ -70,6 +70,18 @@ the portrait gets an asset ID. kie.ai's Seedance 2.5 accepts these as `asset://<
 The layout works from 360 px wide upwards. On touch screens, fields use 16 px text so iOS does not zoom in, buttons
 are at least 42 px tall, and the step bar scrolls sideways.
 
+## Roadmap
+
+Planned in phases, each shipped and tested on its own. The full plan, with data formats, prompt rules and checks, is in
+[PLAN.md](PLAN.md).
+
+| Phase | Feature | Status |
+| --- | --- | --- |
+| 0 | Presets moved into data files (`public/library/*.json`) | Planned |
+| 1 | Outfit library: preset outfits added to the prompts automatically, default when none is chosen | Planned |
+| 2 | Set library: 10–12 preset backgrounds, with "Add chair and mic" for plain rooms | Planned |
+| 3 | Reference video: copy a clip's performance (`@Video1`) or take its script | Planned |
+
 ## Use it on GitHub Pages (no install)
 
 Once Pages is switched on, the app lives at `https://<github-account>.github.io/<repository>/`.
