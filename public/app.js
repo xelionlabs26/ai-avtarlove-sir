@@ -22,24 +22,20 @@
   // Image used as a camera-distance guide for generated sets (served next to this page).
   const REFERENCE_PATH = "reference/podcast-set-framing.jpg";
 
-  const LOOKS = {
-    indowestern: {
-      label: "Indo-western",
-      hint: "Nehru jacket, kurta",
-      outfit: "charcoal-grey Nehru jacket over an off-white handloom linen kurta, slim charcoal trousers, tan leather loafers, minimal steel wristwatch",
-    },
-    linen: {
-      label: "Studio linen",
-      hint: "Crisp linen shirt",
-      outfit: "crisp white linen shirt with sleeves rolled to the forearm, tailored stone-beige trousers, brown leather loafers, slim leather-strap wristwatch",
-    },
-    khadi: {
-      label: "Handloom",
-      hint: "Indigo khadi",
-      outfit: "deep indigo handwoven khadi kurta, natural off-white cotton trousers, tan leather Kolhapuri sandals, simple silver wristwatch",
-    },
-    photo: { label: "As in photo", hint: "Keep my clothes", outfit: null },
+  // Outfits and preset sets live in library/outfits.json and library/sets.json (see library/README.md).
+  // This one outfit is used only if outfits.json cannot be loaded.
+  const FALLBACK_OUTFIT = {
+    id: "indowestern",
+    name: "Charcoal Nehru jacket",
+    hint: "Nehru jacket, kurta",
+    category: "Indo-western",
+    for: ["man", "woman", "person"],
+    default: true,
+    prompt: "charcoal-grey Nehru jacket over an off-white handloom linen kurta, slim charcoal trousers, tan leather loafers, minimal steel wristwatch",
+    image: null,
+    colors: ["#3a3d42", "#efe8da", "#b0835a"],
   };
+  const LIBRARY_ROOT = "library/";
 
   const SPEAKERS = {
     man: { label: "Man", hint: "he / his", noun: "man", he: "he", his: "his", He: "He", His: "His" },
@@ -253,7 +249,7 @@
 
   const saved = loadState();
   const state = Object.assign({}, DEFAULTS, saved);
-  const enums = [["speaker", SPEAKERS], ["look", LOOKS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES], ["camera", CAMERAS]];
+  const enums = [["speaker", SPEAKERS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES], ["camera", CAMERAS]];
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
@@ -276,6 +272,9 @@
   const backend = { mode: "direct", models: DEFAULT_MODELS };
   let pendingKeyAction = null;
   let referenceUrl = null;
+
+  // The library: outfits and preset sets, loaded from library/*.json at start-up.
+  const library = { outfits: [FALLBACK_OUTFIT], sets: [], loaded: false };
 
   function loadState() {
     try { return JSON.parse(localStorage.getItem(STATE_KEY) || "{}") || {}; } catch { return {}; }
@@ -555,13 +554,92 @@
   }
 
   // ===========================================================================
+  // Library
+  // ===========================================================================
+
+  const libraryPath = (p) => (typeof p === "string" && p ? (/^https?:\/\//i.test(p) ? p : LIBRARY_ROOT + p.replace(/^\/+/, "")) : null);
+  const str = (v, max = 600) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+
+  function sanitizeOutfits(list) {
+    if (!Array.isArray(list)) return null;
+    const seen = new Set();
+    const out = [];
+    for (const o of list) {
+      const id = str(o?.id, 80);
+      if (!id || seen.has(id)) continue;
+      const fromPhoto = o.fromPhoto === true;
+      const prompt = str(o.prompt, 600);
+      if (!prompt && !fromPhoto) continue;
+      seen.add(id);
+      out.push({
+        id,
+        name: str(o.name, 60) || id,
+        hint: str(o.hint, 60) || str(o.category, 40) || "",
+        category: str(o.category, 40) || "Other",
+        for: Array.isArray(o.for) && o.for.length ? o.for.filter((x) => SPEAKERS[x]) : Object.keys(SPEAKERS),
+        default: o.default === true,
+        fromPhoto,
+        prompt,
+        image: libraryPath(o.image),
+        colors: Array.isArray(o.colors) ? o.colors.filter((c) => /^#[0-9a-f]{3,8}$/i.test(c)).slice(0, 4) : [],
+      });
+    }
+    return out.length ? out : null;
+  }
+
+  function sanitizeSets(list) {
+    if (!Array.isArray(list)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const x of list) {
+      const id = str(x?.id, 80);
+      const image = libraryPath(x?.image);
+      if (!id || !image || seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        id,
+        name: str(x.name, 60) || id,
+        image,
+        thumb: libraryPath(x.thumb) || image,
+        aspect: ASPECTS[x.aspect] ? x.aspect : "9:16",
+        hasChairAndMic: x.hasChairAndMic !== false,
+        scene: str(x.scene, 700),
+        seat: str(x.seat, 160),
+        microphone: x.microphone !== false && x.hasChairAndMic !== false,
+        light: LIGHTS[x.light] ? x.light : null,
+      });
+    }
+    return out;
+  }
+
+  async function loadLibrary() {
+    const get = async (path) => {
+      try {
+        const res = await fetch(LIBRARY_ROOT + path, { cache: "no-cache" });
+        return res.ok ? await res.json() : null;
+      } catch {
+        return null;
+      }
+    };
+    const [o, sets] = await Promise.all([get("outfits.json"), get("sets.json")]);
+    library.outfits = sanitizeOutfits(o?.outfits) || [FALLBACK_OUTFIT];
+    library.sets = sanitizeSets(sets?.sets);
+    library.loaded = true;
+    if (!outfitById(state.look)) state.look = defaultOutfit().id;
+  }
+
+  const outfitById = (id) => library.outfits.find((o) => o.id === id) || null;
+  const defaultOutfit = () => library.outfits.find((o) => o.default) || library.outfits[0] || FALLBACK_OUTFIT;
+  const setById = (id) => library.sets.find((x) => x.id === id) || null;
+
+  // ===========================================================================
   // Prompts
   // ===========================================================================
 
   function characterPrompt() {
-    const look = LOOKS[state.look] || LOOKS.indowestern;
-    const outfit = look.outfit
-      ? `the full outfit as a ghost mannequin, front view, head to toe: ${look.outfit}`
+    const look = outfitById(state.look) || defaultOutfit();
+    const outfit = look.prompt && !look.fromPhoto
+      ? `the full outfit as a ghost mannequin, front view, head to toe: ${look.prompt}`
       : "the full outfit as a ghost mannequin, front view, head to toe: the same clothes the person wears in the photo, completed naturally into a smart full outfit with matching trousers and footwear";
     return [
       "Use the uploaded photo for the face. Create one wide 16:9 character sheet on a plain white background.",
@@ -601,8 +679,8 @@
   function characterDetails() {
     const info = state.characterInfo;
     if (info && info.for === state.characterUrl && !info.failed) return { ...info, source: "analysis" };
-    const look = state.characterSource === "generated" ? LOOKS[state.characterLook] : null;
-    if (look?.outfit) return { face: null, outfit: look.outfit, layout: "sheet", source: "preset" };
+    const look = state.characterSource === "generated" ? outfitById(state.characterLook) : null;
+    if (look?.prompt) return { face: null, outfit: look.prompt, layout: "sheet", source: "preset" };
     return { face: null, outfit: null, layout: "sheet", source: "generic" };
   }
 
@@ -1350,6 +1428,8 @@
       });
       box.appendChild(b);
     }
+    if (box.dataset.keys) return;
+    box.dataset.keys = "1";
     box.addEventListener("keydown", (e) => {
       if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) return;
       const chips = [...box.querySelectorAll(".chip")];
@@ -1360,6 +1440,12 @@
       next.focus();
       next.click();
     });
+  }
+
+  function buildLookChips() {
+    const opts = {};
+    for (const o of library.outfits) opts[o.id] = { label: o.name, hint: o.hint };
+    buildChips("chips-look", opts, "look");
   }
 
   function updateChips(containerId, value, disabled = false) {
@@ -1567,7 +1653,7 @@
         : ch.source === "analysis"
           ? { thumb: state.characterUrl, text: ch.outfit ? `Outfit read from the sheet: ${ch.outfit}` : "Face and outfit read from the sheet", stateClass: "is-done" }
           : ch.source === "preset"
-            ? { thumb: state.characterUrl, text: `Outfit from the ${LOOKS[state.characterLook].label} look`, stateClass: "is-done" }
+            ? { thumb: state.characterUrl, text: `Outfit: ${outfitById(state.characterLook)?.name || "chosen look"}`, stateClass: "is-done" }
             : { thumb: state.characterUrl, text: "Described in general terms. The sheet could not be read.", stateClass: "is-warn" });
 
     setIngredient("ing-set", !state.backgroundUrl
@@ -1715,7 +1801,7 @@
 
   function bindEvents() {
     buildChips("chips-speaker", SPEAKERS, "speaker");
-    buildChips("chips-look", LOOKS, "look");
+    buildLookChips();
     buildChips("chips-style", SET_STYLES, "setStyle");
     buildChips("chips-chair", CHAIRS, "chair");
     buildChips("chips-light", LIGHTS, "light");
@@ -1903,6 +1989,11 @@
     save();
     setStatus("status-voice", "Please add the recording again. It is now prepared as a clean voice track for the video model.");
   }
+  loadLibrary().then(() => {
+    buildLookChips();
+    save();
+    render();
+  });
   detectBackend().then(() => {
     render();
     if (!hasCredentials()) openKeyPanel();

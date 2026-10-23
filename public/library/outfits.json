@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "outfits": [
+    {
+      "id": "indowestern",
+      "name": "Charcoal Nehru jacket",
+      "hint": "Nehru jacket, kurta",
+      "category": "Indo-western",
+      "for": ["man", "woman", "person"],
+      "default": true,
+      "prompt": "charcoal-grey Nehru jacket over an off-white handloom linen kurta, slim charcoal trousers, tan leather loafers, minimal steel wristwatch",
+      "image": null,
+      "colors": ["#3a3d42", "#efe8da", "#b0835a"]
+    },
+    {
+      "id": "linen",
+      "name": "Studio linen",
+      "hint": "Crisp linen shirt",
+      "category": "Smart casual",
+      "for": ["man", "woman", "person"],
+      "prompt": "crisp white linen shirt with sleeves rolled to the forearm, tailored stone-beige trousers, brown leather loafers, slim leather-strap wristwatch",
+      "image": null,
+      "colors": ["#f4f1ea", "#c9b79c", "#6b4a2f"]
+    },
+    {
+      "id": "khadi",
+      "name": "Indigo khadi",
+      "hint": "Handloom kurta",
+      "category": "Handloom",
+      "for": ["man", "woman", "person"],
+      "prompt": "deep indigo handwoven khadi kurta, natural off-white cotton trousers, tan leather Kolhapuri sandals, simple silver wristwatch",
+      "image": null,
+      "colors": ["#2e3f73", "#f1ece0", "#b0835a"]
+    },
+    {
+      "id": "knit-polo",
+      "name": "Black knit polo",
+      "hint": "Quarter-zip, cargo pants",
+      "category": "Smart casual",
+      "for": ["man", "woman", "person"],
+      "prompt": "black cable-knit long-sleeve polo sweater with a silver quarter-zip, dark olive cargo pants, white chunky sneakers, black wristwatch",
+      "image": null,
+      "colors": ["#1d1e20", "#4b5134", "#f2f2ef"]
+    },
+    {
+      "id": "photo",
+      "name": "As in my photo",
+      "hint": "Keep my clothes",
+      "category": "Own clothes",
+      "for": ["man", "woman", "person"],
+      "fromPhoto": true,
+      "prompt": null,
+      "image": null
+    }
+  ]
+}

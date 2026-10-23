@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "sets": [
+    {
+      "id": "architect-studio-window",
+      "name": "Architect studio",
+      "image": "sets/architect-studio-window.jpg",
+      "thumb": "sets/thumbs/architect-studio-window.jpg",
+      "aspect": "9:16",
+      "hasChairAndMic": true,
+      "scene": "an architect's working studio with warm ochre plaster walls, a tall white-framed window on the left, honey-toned teak bookshelves full of architecture books with small white architectural models on top, a wooden drafting table on the right with rolled drawings, an open floor plan, a floor plan pinned to the wall and a brass desk lamp, and old wooden floorboards",
+      "seat": "deep teal velvet armchair with rolled arms",
+      "microphone": true,
+      "light": "day"
+    },
+    {
+      "id": "teal-velvet-curtains",
+      "name": "Teal velvet",
+      "image": "sets/teal-velvet-curtains.jpg",
+      "thumb": "sets/thumbs/teal-velvet-curtains.jpg",
+      "aspect": "9:16",
+      "hasChairAndMic": true,
+      "scene": "a minimal podcast studio with floor-to-ceiling teal-blue velvet curtains with soft vertical folds filling the background",
+      "seat": "deep teal velvet armchair",
+      "microphone": true,
+      "light": "soft"
+    }
+  ]
+}
