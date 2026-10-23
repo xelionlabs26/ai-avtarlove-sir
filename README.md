@@ -1,31 +1,82 @@
 # Architect Podcast Studio
 
-A small web app that turns **a selfie and a short voice recording** into a lip-synced podcast clip,
-set in an architect's studio. Everything between the two uploads is automatic.
+A small web app that turns **a character sheet (or a selfie) and a short voice recording** into a lip-synced podcast
+clip, set in an architect's studio. Everything between the uploads is automatic.
 
 ## How it works
 
 Nothing is generated on its own. Every image and video starts from a **Create** button, so credits are only
 spent when the user asks.
 
-| Step | Upload (free) | Or create (uses credits) | Done automatically |
+| Step | Upload or pick (free) | Or create (uses credits) | Done automatically |
 | --- | --- | --- | --- |
-| 1. Architect | A ready character sheet (face left, outfit right) | From a selfie, with a look and optional notes | Reads the face and outfit from the sheet |
-| 2. Studio set | A set image (its shape sets the clip format) | From style, chair, light, framing, format and optional notes | Reads the seat, props and light from the set |
-| 3. Voice | An MP4, 2 to 30 seconds | – | Takes the voice out of the MP4 as a clean audio track, measures it, transcribes it and finds natural pauses |
-| 4. Episode clip | – | **Create episode clip** | Writes the video prompt, sets the clip length to the recording and places the camera cuts on pauses |
+| 1. Architect | A ready character sheet (face left, outfit right), and an outfit from the library | From a selfie, with an outfit from the library and optional notes | Puts the chosen outfit in the prompts, or reads the outfit from the sheet |
+| 2. Studio set | A preset from the set library, or your own set image (its shape sets the clip format) | From style, chair, light, framing, format and optional notes, or **Add chair and mic** to a library room | Uses the preset's description, or reads the seat, props and light from the set |
+| 3. Reference video (optional) | A clip to copy its performance, or to take its script | – | Checks the clip against the video model's limits. For a script, takes out the sound and reads the words |
+| 4. Voice | An MP4, 2 to 30 seconds | – | Takes the voice out of the MP4 as a clean audio track, measures it, transcribes it and finds natural pauses |
+| 5. Episode clip | – | **Create episode clip** | Writes the video prompt, sets the clip length to the recording, and places the camera cuts on pauses or follows the reference clip's camera |
 
 All three prompts (character sheet, studio set, video) are written automatically and can be opened and edited.
 
-### Studio set options
+### Outfit library
+
+Step 1 shows the outfits from `public/library/outfits.json` as cards, with filters by category and by speaker. The
+first card, **Default**, is selected at the start.
+
+| Choice | Character sheet (when created from a selfie) | Video prompt |
+| --- | --- | --- |
+| **Default** (no outfit chosen) | The library's default outfit | The outfit on the sheet, as it is |
+| An outfit, and the sheet was created with it | The outfit's wording, on the right side | The outfit from the right side of the sheet, with the outfit's wording |
+| An outfit, and the sheet was uploaded or made with another outfit | – | Only the face comes from the sheet. The outfit's wording is used, and its image, if it has one, is sent as `@Image3` |
+
+When the sheet shows a different outfit from the one chosen, step 1 says so and offers **Recreate sheet with this
+outfit** (uses credits, never automatic). "As in my photo" keeps the clothes from the selfie.
+
+### Set library
+
+Step 2 opens on **Library**: the preset backgrounds from `public/library/sets.json`. Each card says **Chair and mic**
+(ready to use) or **Room only**. For a room, pick a chair and press **Add chair and mic** (one image edit, uses
+credits), or use the room as it is. The scene wording in the video prompt comes from the preset, so it is accurate even
+without a fal.ai key. **I have a set image** and **Create a set** work as before.
+
+### Reference video (optional)
+
+Step 3 can guide the clip with another video. It is off by default.
+
+- **Copy the performance:** the clip goes to Seedance as `@Video1`. The architect copies its body movement, gestures,
+  head turns, pacing and camera, but keeps the face and outfit from `@Image1`, the set from `@Image2` and the voice from
+  `@Audio1`. Nothing else from the clip is used, and the camera choice in step 5 is locked to the clip's. The clip must
+  be MP4 or MOV, 2 to 30 seconds, 24 to 60 fps, 480p to 720p (720 × 1280 is fine, 1080 × 1920 is too large) and up to
+  90 MB. The app checks this before uploading and says what to change.
+- **Use the script:** only the clip's sound is taken out (in the browser) and read with Whisper on fal.ai, so any size
+  or frame rate works, up to 3 minutes. The words appear with a copy button, to be recorded in the architect's own voice
+  in step 4. This needs a fal.ai key, also when videos are made on kie.ai.
+
+Before adding a clip, tick the box confirming you have the right to use it and its words. Seedance refuses reference
+videos that show a real, identifiable face, just as it refuses such character sheets, so use a clip in which no real
+face can be recognised.
+
+### Adding your own outfits and backgrounds
+
+The libraries are plain files in `public/library/`, so new entries need no code:
+
+1. Put the image in `public/library/outfits/` (an outfit) or `public/library/sets/` (a background, vertical 9:16),
+   with a small copy of each background in `public/library/sets/thumbs/`.
+2. Add an entry to `outfits.json` or `sets.json`. For a background, say whether it already shows the chair and the
+   mic (`hasChairAndMic`) and describe the room in one sentence (`scene`).
+3. Commit and push. The site updates about a minute later.
+
+Every field is explained in [public/library/README.md](public/library/README.md).
+
+### Creating a set
 
 - **Style:** Architect studio (default: plaster walls, tall window, teak bookshelves with white models, drafting table
   with rolled drawings and a brass lamp), Teal velvet, Podcast lounge, Courtyard, Concrete & light.
 - **Chair:** Teal velvet (default), Suits the style, Teak & cane, Bouclé, Leather.
 - **Light:** Soft daylight (default, from a window on the left), Soft studio, Warm evening, Moody.
 - **Framing:** Talking-head (default), Whole room, or a bit closer. Talking-head is a close, chest-height shot like a
-  podcast clip: the chair fills the lower two-thirds, the curtains fill the rest, and a black broadcast mic on a boom arm
-  comes in from the left at mouth height. No floor, ceiling, people or text.
+  podcast clip: the chair fills the lower half, right of centre, a black broadcast mic on a boom arm comes in from the
+  left at mouth height, and the room fills the upper half. No ceiling, people or text.
 - **Format:** Vertical 9:16 (Reels, Shorts) or Landscape 16:9 (YouTube).
 - **Match this framing:** for the wide framings only, sends `public/reference/podcast-set-framing.jpg` as a guide for
   camera distance.
@@ -51,12 +102,24 @@ kie.ai calls go straight from the browser: uploads to `kieai.redpandaai.co/api/f
 for a limited time, so finish a clip in one session.
 
 A fal.ai key is optional with kie.ai. When present, it is used for extra helpers that kie.ai does not provide:
-reading the sheet and the set (`openrouter/router/vision`), transcribing the recording to place cuts on pauses
-(`fal-ai/whisper`), and converting audio a browser cannot decode (`fal-ai/ffmpeg-api/merge-audios`). Without it, the
-prompt uses the preset descriptions and the cuts are spaced evenly.
+reading the sheet and the set (`openrouter/router/vision`), transcribing the recording to place cuts on pauses and
+reading a reference clip's script (`fal-ai/whisper`), and converting audio a browser cannot decode
+(`fal-ai/ffmpeg-api/merge-audios`). Without it, the prompt uses the preset descriptions, the cuts are spaced evenly,
+and **Use the script** is not available.
 
-The files reach the video model in a fixed order, so the prompt tags always line up:
-`@Image1` = character sheet (or verified portrait), `@Image2` = studio set, `@Audio1` = the voice.
+The files reach the video model in a fixed order, so the prompt tags always line up. A tag is in the prompt only when
+its file is sent.
+
+| Tag | File | When |
+| --- | --- | --- |
+| `@Image1` | Character sheet, or verified portrait | Always |
+| `@Image2` | Studio set | Always |
+| `@Image3` | Outfit image | Only when a library outfit replaces the clothes on the sheet |
+| `@Video1` | Reference clip | Only when copying a performance |
+| `@Audio1` | The voice | Always |
+
+On kie.ai they are sent as `reference_image_urls`, `reference_video_urls` and `reference_audio_urls`, and on fal.ai as
+`image_urls`, `video_urls` and `audio_urls`.
 
 ### Real people and verified portraits
 
@@ -72,15 +135,15 @@ are at least 42 px tall, and the step bar scrolls sideways.
 
 ## Roadmap
 
-Planned in phases, each shipped and tested on its own. The full plan, with data formats, prompt rules and checks, is in
+Built in phases, each shipped and tested on its own. The full plan, with data formats, prompt rules and checks, is in
 [PLAN.md](PLAN.md).
 
 | Phase | Feature | Status |
 | --- | --- | --- |
-| 0 | Presets moved into data files (`public/library/*.json`) | Planned |
-| 1 | Outfit library: preset outfits added to the prompts automatically, default when none is chosen | Planned |
-| 2 | Set library: 10–12 preset backgrounds, with "Add chair and mic" for plain rooms | Planned |
-| 3 | Reference video: copy a clip's performance (`@Video1`) or take its script | Planned |
+| 0 | Presets moved into data files (`public/library/*.json`) | Done |
+| 1 | Outfit library: preset outfits added to the prompts automatically, default when none is chosen | Done |
+| 2 | Set library: preset backgrounds, with "Add chair and mic" for plain rooms | Done (2 presets so far, room for 10–12) |
+| 3 | Reference video: copy a clip's performance (`@Video1`) or take its script | Done |
 
 ## Use it on GitHub Pages (no install)
 

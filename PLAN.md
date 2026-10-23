@@ -3,16 +3,30 @@
 This plan adds three features to Architect Podcast Studio. Each phase ships on its own, is tested before the next one
 starts, and changes only the parts named in it.
 
-| Phase | Feature | Depends on | Needs from you |
-| --- | --- | --- | --- |
-| 0 | Move presets into data files | – | Nothing |
-| 1 | Outfit library | Phase 0 | Your outfit images and names |
-| 2 | Set (background) library | Phase 0 | Your 10–12 background images |
-| 3 | Reference video | Phases 1–2 | One sample reference video |
+**Status: all four phases are built, tested and pushed.** What is left is content only: your outfit images and your
+backgrounds (see [What you add next](#what-you-add-next)).
+
+| Phase | Feature | Depends on | Status | Needs from you |
+| --- | --- | --- | --- | --- |
+| 0 | Move presets into data files | – | Done | Nothing |
+| 1 | Outfit library | Phase 0 | Done | Your outfit images and names |
+| 2 | Set (background) library | Phase 0 | Done | Your 10–12 background images |
+| 3 | Reference video | Phases 1–2 | Done | One real reference clip, to try it |
+
+### Where the build differs from the plan
+
+- **Phase 1:** the four "Looks" are now library outfits (Charcoal Nehru jacket is the default), plus Black knit polo
+  from your template prompt and "As in my photo" (keep the selfie's clothes).
+- **Phase 2:** Library is the first tab in step 2. It starts with two presets made from your images: Architect studio
+  and Teal velvet.
+- **Phase 3:** the reference video is its own step, step 3, so Voice is now step 4 and Episode clip step 5. The video
+  limits apply only to **Copy the performance**. **Use the script** takes out only the clip's sound in the browser, so
+  any size and frame rate works, up to 3 minutes, and the clip itself is never uploaded to the video provider. While a
+  reference performance is used, the camera choice is locked to the clip's camera.
 
 ---
 
-## Where things stand today
+## Starting point (before Phase 0)
 
 - **Step 1, Architect:** upload a character sheet, or create one from a selfie with a "Look" (4 fixed outfits) and
   free-text notes. An optional verified portrait asset ID (kie.ai) can replace the sheet's face.
@@ -156,7 +170,7 @@ and mic" sends one edit request with the right prompt, and the grid works at 360
 | Mode | What it means | How it reaches Seedance |
 | --- | --- | --- |
 | **Copy the performance** | Keep the clip's body movement, gestures, pacing and camera framing, but replace the person with your architect and the room with your set | Clip sent as `@Video1` in `reference_video_urls`. The prompt says: follow the movement, gestures, timing and camera of `@Video1`; take the person only from `@Image1` and the scene only from `@Image2`; use no face, clothing or background from `@Video1` |
-| **Use the script** | Take the words spoken in the clip | The clip is transcribed (needs a fal.ai key). The script is shown with a copy button so the architect can record it in their own voice for step 3 |
+| **Use the script** | Take the words spoken in the clip | The clip is transcribed (needs a fal.ai key). The script is shown with a copy button so the architect can record it in their own voice for the Voice step (step 4 since Phase 3) |
 
 ### Limits the app checks before upload
 
@@ -170,6 +184,9 @@ Seedance 2.5 on kie.ai accepts reference videos that are:
 
 The app reads length and size in the browser. A clip that is too large or too long gets a clear message on how to
 export it (720p, 30 s or less). Automatic downscaling is not in scope for the first version.
+
+These limits are for **Copy the performance**. For **Use the script**, only the sound is used, so any size and frame
+rate works, up to 3 minutes.
 
 ### Important limits
 
@@ -209,22 +226,28 @@ The prompt builder adds a tag's paragraph only when that tag is sent, so the tex
 
 ---
 
-## Questions to settle before each phase
+## Open questions, and the defaults used for now
 
-**Phase 1**
+Each of these can be changed later by editing the library files or asking for a change.
 
-1. Please send the outfit images and a name for each. If you already have the exact wording for an outfit, include it.
-   Otherwise I will write it from the image.
-2. Should each outfit be shown for men, women or both?
-3. Should the four current "Looks" stay in the library, or be replaced by your outfits?
+| # | Question | Default used for now |
+| --- | --- | --- |
+| 1 | Outfit images, names and wording | Five outfits without images (colour swatches instead). Add your own as described below |
+| 2 | Which speakers each outfit is for | All outfits show for man, woman and person |
+| 3 | Keep the four "Looks" or replace them | Kept, as the first library outfits |
+| 4 | The 10–12 background images | Two presets so far: Architect studio and Teal velvet |
+| 5 | Do the backgrounds show the chair and mic | Both presets do. "Room only" images get **Add chair and mic** |
+| 6 | Library as the default tab in step 2 | Yes |
+| 7 | Which reference mode first | Both are built |
+| 8 | A sample reference clip | Tested with generated test clips. Please try one real clip |
 
-**Phase 2**
+## What you add next
 
-4. Please send the 10–12 background images, vertical 9:16 if possible.
-5. Do they already show the chair and the mic, or should the app add them ("Add chair and mic")?
-6. Should a library set become the default in step 2 instead of "Create a set"?
+1. **Outfits:** for each outfit, a front-view image on a plain background (no person's face), saved in
+   `public/library/outfits/`, and an entry in `public/library/outfits.json` with its name, category and exact wording.
+2. **Backgrounds:** 10–12 vertical (9:16) images with no people, text or watermarks, saved in `public/library/sets/`
+   with a small copy in `public/library/sets/thumbs/`, and an entry in `public/library/sets.json` for each. Set
+   `hasChairAndMic` to `true` if the image already shows the podcast chair and the boom-arm mic, or `false` for a plain
+   room, and describe the room in one sentence in `scene`.
 
-**Phase 3**
-
-7. Which mode matters more first: "Copy the performance" or "Use the script"?
-8. Please send one sample reference clip to test the limit checks with.
+Every field is explained in [public/library/README.md](public/library/README.md). Nothing in the code needs to change.

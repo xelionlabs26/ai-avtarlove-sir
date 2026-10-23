@@ -9,6 +9,10 @@ To add an entry, add its image to the right folder, add a block to the JSON file
 updates about a minute later. If a file is missing or has a mistake, the app still works: the outfit list falls back to
 one default outfit, and the set library is simply empty.
 
+Each block goes inside the list in its file (`"outfits": [ … ]` or `"sets": [ … ]`), with a comma between blocks. On
+the GitHub website, open the folder (`public/library/outfits/` or `public/library/sets/`) and use **Add file → Upload
+files** to add images.
+
 ## Outfits (`outfits.json`)
 
 ```json
