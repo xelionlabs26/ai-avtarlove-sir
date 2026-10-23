@@ -134,6 +134,18 @@
     landscape: { label: "Landscape 16:9", hint: "YouTube", aspect: "16:9" },
   };
 
+  // Reference video: off, copy its performance (sent as @Video1), or take its script (transcribed).
+  const REF_MODES = {
+    off: { label: "Don't use", hint: "No reference" },
+    performance: { label: "Copy the performance", hint: "Movement and camera" },
+    script: { label: "Use the script", hint: "Words to record" },
+  };
+  // Seedance 2.5 limits for reference videos. A clip used only for its script is never sent to Seedance, so only its
+  // length counts, and only its sound is uploaded.
+  const REF_LIMITS = { minSec: 2, maxSec: 30, minFps: 24, maxFps: 60, minPixels: 409600, maxPixels: 927408, minSide: 300, maxSide: 6000 };
+  const SCRIPT_MAX_SEC = 180;
+  const SCRIPT_MAX_BYTES = 250 * 1024 * 1024;
+
   const CAMERAS = {
     still: { label: "Still", hint: "One fixed angle" },
     cuts: { label: "Three cuts", hint: "Wide, medium, close" },
@@ -245,6 +257,11 @@
 
     assetId: "",
 
+    refMode: "off", // "off" | "performance" | "script"
+    refRights: false,
+    refVideo: null, // { id, name, size, duration, width, height, fps, url?, provider?, at?, audioUrl? }: url only once uploaded for copying the performance
+    refScript: null, // { for: refVideo.id, text, language } or { for, failed }
+
     provider: "kie", // "kie" | "fal"
     quality: "720p",
     camera: "still",
@@ -255,7 +272,7 @@
 
   const saved = loadState();
   const state = Object.assign({}, DEFAULTS, saved);
-  const enums = [["speaker", SPEAKERS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES], ["camera", CAMERAS]];
+  const enums = [["refMode", REF_MODES], ["speaker", SPEAKERS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES], ["camera", CAMERAS]];
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["library", "upload", "create"].includes(state.setMode)) state.setMode = "library";
@@ -283,10 +300,12 @@
   if (saved.characterSource === "generated" && !("characterMode" in saved)) state.characterMode = "create";
   if (saved.backgroundSource === "generated" && !("setMode" in saved)) state.setMode = "create";
 
-  const busy = { character: null, background: null, audio: null, video: null }; // { text, since, stage }
+  const busy = { character: null, background: null, ref: null, audio: null, video: null }; // { text, since, stage }
   const pending = { character: null, scene: null, transcript: null };
   const backend = { mode: "direct", models: DEFAULT_MODELS };
   let pendingKeyAction = null;
+  let keyCloseTimer = null;
+  let refFile = null; // { id, file, preview }: the reference clip picked in this visit, kept in memory only
 
   // The library: outfits and preset sets, loaded from library/*.json at start-up.
   const library = { outfits: [FALLBACK_OUTFIT], sets: [], loaded: false };
@@ -448,6 +467,7 @@
         prompt: input.prompt,
         reference_image_urls: input.image_urls,
         reference_audio_urls: input.audio_urls,
+        ...(input.video_urls?.length ? { reference_video_urls: input.video_urls } : {}),
         aspect_ratio: input.aspect_ratio,
         resolution: input.resolution,
         duration: input.duration === "auto" ? -1 : Number(input.duration),
@@ -486,8 +506,8 @@
 
   const useKie = (kind) => state.provider === "kie" && PROVIDER_KINDS.has(kind);
 
-  async function uploadFile(file) {
-    if (state.provider === "kie") return kieUpload(file);
+  async function uploadFile(file, via = state.provider) {
+    if (via === "kie") return kieUpload(file);
     if (backend.mode === "server") {
       const fd = new FormData();
       fd.append("file", file, file.name || "upload");
@@ -664,6 +684,8 @@
     if (madeWithIt) return { mode: "sheet-chosen", outfit: chosen };
     return { mode: "override", outfit: chosen, image: chosen.image };
   }
+
+  const refActive = () => state.refMode === "performance" && Boolean(state.refVideo?.url) && state.refRights;
 
   const isLibrarySource = () => state.backgroundSource === "library" || state.backgroundSource === "library-edited";
   // What to show for the current set: the app's own copy for unedited library sets (fast, never expires).
@@ -891,6 +913,11 @@
       `between phrases ${who} pauses with ${sp.his} mouth closed, blinks naturally and sometimes briefly closes ${sp.his} eyes in thought. ` +
       `Movements stay small and natural: no big gestures, no exaggerated smiling.`;
 
+    // A reference video replaces the house performance and camera with the clip's own.
+    const ref = refActive();
+    const p4ref = `${Who} sits in ${seatName} from @Image2 and copies the body movement, posture, gestures, head turns, facial expressions and pacing of the person in @Video1, ` +
+      `while lip-syncing precisely to @Audio1. Use @Video1 only for movement, timing and camera: do not use its person, face, body shape, clothing, background, text or audio.`;
+
     // 5. Look.
     const lightLook = (sc.light && LIGHT_LOOKS[sc.light]) || (sc.lighting ? `${trim(sc.lighting)}, soft shadows` : LIGHT_LOOKS.warm);
     const p5 = `The visuals feature ${lightLook}, natural skin texture, realistic fabric texture on the outfit, and a photorealistic authentic UGC creator look.`;
@@ -898,7 +925,10 @@
     // 6. Camera: one fixed angle, or cuts fitted to the recording.
     let shots;
     let p7;
-    if (state.camera !== "cuts") {
+    if (ref) {
+      shots = [`Camera: follow the camera angle, framing and any camera movement or cuts of @Video1, applied to the scene from @Image2.`];
+      p7 = `${Who}'s face, outfit, lighting and scene stay identical throughout.`;
+    } else if (state.camera !== "cuts") {
       shots = [
         `Camera: one continuous shot from a locked-off tripod camera at seated chest height, straight on, in the same direction as @Image2: a seated full-body shot with ${who} filling the frame from just above the head down to the shoes, both armrests of the chair visible at the sides, the microphone on its boom arm at the upper left, and the set softly behind. ` +
         `The camera never moves: no cuts, no zoom, no pan, no tilt, no shake. Only ${who} moves.`,
@@ -923,8 +953,8 @@
       p7 = `${Who}'s face, outfit, lighting and scene stay identical across all three cuts.`;
     }
 
-    const p8 = "Audio includes only the original audio from @Audio1. No background music, no sound effects, no added ambience, no subtitles, no on-screen text.";
-    return [p1, p2, p3, p4, p5, shots.join("\n"), p7, p8].join("\n\n");
+    const p8 = `Audio includes only the original audio from @Audio1${ref ? ", nothing from @Video1" : ""}. No background music, no sound effects, no added ambience, no subtitles, no on-screen text.`;
+    return [p1, p2, p3, ref ? p4ref : p4, p5, shots.join("\n"), p7, p8].join("\n\n");
   }
 
   // Prompt boxes: each is written automatically until the user chooses to edit it.
@@ -1100,6 +1130,123 @@
         return null;
       }
       pos += size;
+    }
+    return null;
+  }
+
+  /** Reads duration, video size (after rotation) and frame rate from an MP4/MOV header, for any codec. */
+  async function mp4Info(file) {
+    const read = async (start, len) => new DataView(await file.slice(start, start + len).arrayBuffer());
+    const t4 = (dv, o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+    let pos = 0;
+    let moov = null;
+    for (let g = 0; pos + 8 <= file.size && g < 10000; g++) {
+      const h = await read(pos, 16);
+      if (h.byteLength < 8) return null;
+      let size = h.getUint32(0);
+      let header = 8;
+      if (size === 1) { size = Number(h.getBigUint64(8)); header = 16; } else if (size === 0) size = file.size - pos;
+      if (size < header) return null;
+      if (t4(h, 4) === "moov") {
+        if (size > 16 * 1024 * 1024) return null;
+        moov = await read(pos, size);
+        break;
+      }
+      pos += size;
+    }
+    if (!moov) return null;
+    const children = (start, end) => {
+      const out = [];
+      for (let p = start; p + 8 <= end; ) {
+        let size = moov.getUint32(p);
+        let header = 8;
+        if (size === 1) { size = Number(moov.getBigUint64(p + 8)); header = 16; } else if (size === 0) size = end - p;
+        if (size < header || p + size > end) break;
+        out.push({ t: t4(moov, p + 4), start: p, body: p + header, end: p + size });
+        p += size;
+      }
+      return out;
+    };
+    const find = (box, t) => children(box.body, box.end).find((b) => b.t === t);
+    const timing = (box) => {
+      const v = moov.getUint8(box.start + 8);
+      const ts = moov.getUint32(box.start + (v === 1 ? 28 : 20));
+      const d = v === 1 ? Number(moov.getBigUint64(box.start + 32)) : moov.getUint32(box.start + 24);
+      return ts ? d / ts : null;
+    };
+    const root = { start: 0, body: moov.getUint32(0) === 1 ? 16 : 8, end: moov.byteLength };
+    const mvhd = find(root, "mvhd");
+    const info = { duration: mvhd ? timing(mvhd) : null, width: null, height: null, fps: null };
+    for (const trak of children(root.body, root.end).filter((b) => b.t === "trak")) {
+      const mdia = find(trak, "mdia");
+      const hdlr = mdia && find(mdia, "hdlr");
+      if (!hdlr || t4(moov, hdlr.start + 16) !== "vide") continue;
+      const tkhd = find(trak, "tkhd");
+      if (tkhd) {
+        let w = moov.getUint32(tkhd.end - 8) / 65536;
+        let h = moov.getUint32(tkhd.end - 4) / 65536;
+        const a = moov.getInt32(tkhd.end - 44) / 65536;
+        const b = moov.getInt32(tkhd.end - 40) / 65536;
+        if (Math.abs(a) < 0.01 && Math.abs(Math.abs(b) - 1) < 0.01) [w, h] = [h, w];
+        info.width = Math.round(w) || null;
+        info.height = Math.round(h) || null;
+      }
+      const mdhd = find(mdia, "mdhd");
+      const minf = find(mdia, "minf");
+      const stbl = minf && find(minf, "stbl");
+      const stts = stbl && find(stbl, "stts");
+      if (mdhd && stts) {
+        const secs = timing(mdhd);
+        let samples = 0;
+        const count = moov.getUint32(stts.start + 12);
+        for (let i = 0; i < count && stts.start + 24 + i * 8 <= stts.end; i++) samples += moov.getUint32(stts.start + 16 + i * 8);
+        if (secs) info.fps = Math.round((samples / secs) * 100) / 100;
+      }
+      break;
+    }
+    return info;
+  }
+
+  /** Falls back to the browser's video element for length and size when the header cannot be read. */
+  function videoElementInfo(file) {
+    return new Promise((resolve) => {
+      const el = document.createElement("video");
+      const url = URL.createObjectURL(file);
+      let settled = false;
+      const done = (v) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        URL.revokeObjectURL(url);
+        el.removeAttribute("src");
+        resolve(v);
+      };
+      const timer = setTimeout(() => done(null), 8000);
+      el.preload = "metadata";
+      el.muted = true;
+      el.onloadedmetadata = () => done({ duration: Number.isFinite(el.duration) ? el.duration : null, width: el.videoWidth || null, height: el.videoHeight || null, fps: null });
+      el.onerror = () => done(null);
+      el.src = url;
+    });
+  }
+
+  /** Returns a plain message when a reference clip is outside what Seedance accepts (or, for a script, too long), else null. */
+  function refProblem(info, forScript) {
+    const L = REF_LIMITS;
+    if (forScript) {
+      return info.duration > SCRIPT_MAX_SEC + 0.5 ? `This clip is ${fmtSec(info.duration)} long. To read a script, use a clip of ${SCRIPT_MAX_SEC / 60} minutes or less.` : null;
+    }
+    if (info.duration && (info.duration < L.minSec || info.duration > L.maxSec + 0.2)) {
+      return `This clip is ${fmtSec(info.duration)} long. Reference videos must be ${L.minSec} to ${L.maxSec} seconds. Trim it and try again.`;
+    }
+    if (info.width && info.height) {
+      const px = info.width * info.height;
+      const side = `${info.width} × ${info.height}`;
+      if (px > L.maxPixels || Math.max(info.width, info.height) > L.maxSide) return `This clip is ${side}. Reference videos must be 720p or smaller (for example 720 × 1280). Export it at 720p and try again.`;
+      if (px < L.minPixels || Math.min(info.width, info.height) < L.minSide) return `This clip is ${side}, below what the model accepts. Use at least 480p (for example 480 × 854).`;
+    }
+    if (info.fps && (info.fps < L.minFps - 0.5 || info.fps > L.maxFps + 0.5)) {
+      return `This clip runs at ${Math.round(info.fps)} frames per second. Reference videos must be ${L.minFps} to ${L.maxFps} frames per second.`;
     }
     return null;
   }
@@ -1475,6 +1622,129 @@
     }
   }
 
+  /** Length, size and frame rate of a clip: from the file header, or from the browser when the header cannot be read. */
+  async function clipInfo(file) {
+    let info = null;
+    try { info = await mp4Info(file); } catch { info = null; }
+    if (!info || !info.width || !info.duration) {
+      const el = await videoElementInfo(file);
+      info = { ...(el || {}), ...Object.fromEntries(Object.entries(info || {}).filter(([, v]) => v)) };
+    }
+    return info;
+  }
+
+  /** Reading a script always runs on fal.ai (Whisper), also when videos are made on kie.ai. */
+  function needFalForScript(action) {
+    pendingKeyAction = action;
+    openKeyPanel("Reading a script uses fal.ai, also when videos are made on kie.ai. Add a fal.ai key and the script is read straight away.");
+    setStatus("status-ref", "Add a fal.ai key in the key panel to read the script.", "error");
+  }
+
+  /**
+   * Adds a reference clip. To copy its performance, it must meet Seedance's limits and is uploaded to the video
+   * provider. To use its script, only its sound is taken out and read, so any size and frame rate is fine.
+   */
+  async function onRefVideo(file) {
+    const ok = /\.(mp4|mov)$/i.test(file.name || "") || /^video\/(mp4|quicktime)$/.test(file.type);
+    if (!ok) return setStatus("status-ref", "Please use an MP4 or MOV video.", "error");
+    if (!state.refRights) return setStatus("status-ref", "Please confirm you have the right to use this clip first.", "error");
+    if (busy.ref) return setStatus("status-ref", "Please wait for the current step to finish.", "error");
+    const forScript = state.refMode === "script";
+    if (file.size > (forScript ? SCRIPT_MAX_BYTES : MAX_UPLOAD_BYTES)) {
+      return setStatus("status-ref", forScript
+        ? "This clip is larger than 250 MB. Export a smaller copy and try again."
+        : "This clip is larger than 90 MB. Export it at 720p, 30 seconds or less, and try again.", "error");
+    }
+    if (forScript && !falReady()) return needFalForScript(() => onRefVideo(file));
+    if (!forScript && !ensureKey(() => onRefVideo(file))) return;
+    setStatus("status-ref", "");
+    setBusy("ref", "Checking the clip…");
+    render();
+    let readScript = false;
+    try {
+      const info = await clipInfo(file);
+      const problem = refProblem(info, forScript);
+      if (problem) throw userError(problem);
+      const clip = {
+        id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: file.name || "reference.mp4", size: file.size,
+        duration: info.duration || null, width: info.width || null, height: info.height || null, fps: info.fps || null,
+      };
+      if (!forScript) {
+        setBusy("ref", "Uploading the clip…");
+        renderBusy();
+        Object.assign(clip, { url: (await uploadFile(file)).url, provider: state.provider, at: Date.now() });
+      }
+      if (refFile?.preview) URL.revokeObjectURL(refFile.preview);
+      refFile = { id: clip.id, file, preview: forScript ? URL.createObjectURL(file) : null };
+      state.refVideo = clip;
+      state.refScript = null;
+      save();
+      setStatus("status-ref", forScript ? "Clip added." : "Reference clip ready.", "ok");
+      readScript = forScript;
+    } catch (err) {
+      setStatus("status-ref", err.message, "error");
+    } finally {
+      setBusy("ref", null);
+      render();
+    }
+    if (readScript) readRefScript();
+  }
+
+  /** Takes the sound out of a clip as a small WAV on fal.ai storage. Null when this browser cannot decode it. */
+  async function clipSoundUrl(file) {
+    let wav;
+    try {
+      wav = encodeWav(await decodeAudio(file), SCRIPT_MAX_SEC + 1);
+    } catch (err) {
+      console.warn("Could not take the sound out of the clip in the browser:", err);
+      return null;
+    }
+    const base = (file.name || "reference").replace(/\.[^.]+$/, "");
+    return (await uploadFile(new File([wav], `${base}-sound.wav`, { type: "audio/wav" }), "fal")).url;
+  }
+
+  /** Transcribes the reference clip so the architect can record the same words in their own voice. */
+  async function readRefScript() {
+    const rv = state.refVideo;
+    if (!rv || busy.ref) return;
+    if (!falReady()) return needFalForScript(readRefScript);
+    const id = rv.id;
+    const file = refFile?.id === id ? refFile.file : null;
+    setStatus("status-ref", "");
+    setBusy("ref", "Taking the sound out of the clip…");
+    render();
+    try {
+      let url = rv.audioUrl || (file && (await clipSoundUrl(file))) || rv.url || null;
+      if (!url && file && file.size <= MAX_UPLOAD_BYTES) url = (await uploadFile(file, "fal")).url;
+      if (!url) throw userError("This browser could not read the sound in this clip. Export it as an MP4 and add it again.");
+      if (state.refVideo?.id !== id) return;
+      state.refVideo.audioUrl = url;
+      setBusy("ref", "Reading the script…");
+      renderBusy();
+      const r = await runJob("transcribe", { audio_url: url, task: "transcribe", chunk_level: "segment" }, null, 1200);
+      if (state.refVideo?.id !== id) return;
+      const text = String(r?.text || "").trim();
+      state.refScript = text ? { for: id, text, language: r?.inferred_languages?.[0] || null } : { for: id, failed: true };
+      save();
+      const long = rv.duration > MAX_AUDIO + 0.2;
+      setStatus("status-ref", !text
+        ? "No speech was found in this clip."
+        : long
+          ? `Script ready. One clip is at most ${MAX_AUDIO} seconds, so record the part you need in step 4, in the architect's own voice.`
+          : "Script ready. Record it in the architect's own voice in step 4.", text ? "ok" : "error");
+    } catch (err) {
+      if (state.refVideo?.id === id) {
+        state.refScript = { for: id, failed: true };
+        delete state.refVideo.audioUrl; // a retry takes the sound out again
+      }
+      save();
+      setStatus("status-ref", err.userFacing ? err.message : `The script could not be read. ${err.message}`, "error");
+    } finally {
+      setBusy("ref", null);
+      render();
+    }
+  }
+
   // Seedance refuses reference images that show a real, identifiable person.
   const REAL_PERSON = /likeness|real (people|person|human)|privacy|PrivacyInformation/i;
 
@@ -1484,11 +1754,13 @@
       const route = state.provider === "kie"
         ? "If the architect has a verified portrait asset ID, enter it in step 1 and try again."
         : "fal.ai does not offer that programme. kie.ai accepts verified portrait asset IDs, so switch to kie.ai in the key panel if you have one.";
-      return "Seedance 2.5 refused the images because the character sheet shows a real person's face. " +
+      const refNote = refActive() ? " The reference video can also cause this: use a clip without an identifiable face." : "";
+      return `Seedance 2.5 refused the inputs because they show a real person's face.${refNote} ` +
         "Seedance only accepts real people through ByteDance's verified-portrait programme, so trying again with the same sheet will fail the same way. " +
         `${route} Details: ${m}`;
     }
-    if (/audio_urls|video_urls/i.test(m)) return `The video model could not read the voice track. Please add the recording again in step 3. Details: ${m}`;
+    if (/video_urls/i.test(m)) return `The video model could not read the reference video. Add it again in step 3, or switch the reference off. Details: ${m}`;
+    if (/audio_urls/i.test(m)) return `The video model could not read the voice track. Please add the recording again in step 4. Details: ${m}`;
     if (/image_urls/i.test(m)) return `The video model could not read one of the images. Try adding it again as a JPG or PNG. Details: ${m}`;
     return m;
   }
@@ -1497,6 +1769,9 @@
 
   async function createEpisode() {
     if (!(characterInput() && state.backgroundUrl && state.audio?.url) || busy.video) return;
+    if (state.refMode === "performance" && !refActive()) {
+      return setStatus("status-video", "Add the reference clip in step 3 (and tick the rights box), or switch the reference off.", "error");
+    }
     if (!ensureKey(createEpisode)) return;
     setStatus("status-video", "");
     setBusy("video", "Finishing the prompt…", "prompt");
@@ -1513,9 +1788,21 @@
         renderProgress();
         images.push(await libraryUpload(plan.image));
       }
+      // The rights box can be unticked while the prompt is being finished.
+      if (state.refMode === "performance" && !refActive()) {
+        throw userError("Add the reference clip in step 3 (and tick the rights box), or switch the reference off.");
+      }
+      const ref = refActive();
+      if (ref) {
+        const r = state.refVideo;
+        if (r.provider !== state.provider || Date.now() - r.at > UPLOAD_TTL[state.provider]) {
+          throw userError("The reference clip's upload has expired or belongs to the other provider. Please add it again in step 3.");
+        }
+      }
       const input = {
         prompt: promptFor("video"),
         image_urls: images,
+        ...(ref ? { video_urls: [state.refVideo.url] } : {}),
         audio_urls: [state.audio.url],
         aspect_ratio: aspect,
         resolution: state.quality,
@@ -1851,7 +2138,7 @@
   }
 
   function renderBusy() {
-    const map = { character: "busy-character", background: "busy-set", audio: "busy-voice" };
+    const map = { character: "busy-character", background: "busy-set", ref: "busy-ref", audio: "busy-voice" };
     for (const [key, id] of Object.entries(map)) {
       const el = $(id);
       const b = busy[key];
@@ -1983,7 +2270,45 @@
     $("btn-own-set").textContent = state.backgroundUrl && state.backgroundSource === "uploaded" ? "Replace set image" : "Choose set image";
     renderPromptBox("set");
 
-    // ---- Step 3: voice ----
+    // ---- Step 3: reference video (optional) ----
+    const rv = state.refVideo;
+    const refOn = state.refMode !== "off";
+    const scriptMode = state.refMode === "script";
+    // The clip this mode can use: any clip for a script, an uploaded one for copying the performance.
+    const clip = !refOn || !rv ? null : scriptMode || rv.url ? rv : null;
+    const preview = clip && (clip.url || (refFile?.id === clip.id ? refFile.preview : null));
+    updateChips("chips-refmode", state.refMode, Boolean(busy.ref) || Boolean(busy.video));
+    $("ref-body").hidden = !refOn;
+    $("ref-face-note").hidden = state.refMode !== "performance";
+    $("opt-ref-rights").checked = Boolean(state.refRights);
+    $("btn-choose-ref").disabled = Boolean(busy.ref) || !state.refRights;
+    $("btn-choose-ref").textContent = clip ? "Replace reference video" : "Choose reference video";
+    $("ref-limits").textContent = scriptMode
+      ? "MP4 or MOV · up to 3 minutes · any size. Only the sound is used, to read the words."
+      : "MP4 or MOV · 2 to 30 seconds · 24 to 60 fps · 480p to 720p (for example 720 × 1280) · up to 90 MB";
+    $("ph-ref").hidden = refOn;
+    $("drop-ref").hidden = !refOn || Boolean(preview);
+    const refEl = $("ref-video");
+    refEl.hidden = !preview;
+    if (preview && refEl.getAttribute("src") !== preview) refEl.src = preview;
+    if (!preview && refEl.hasAttribute("src")) { refEl.removeAttribute("src"); refEl.load(); }
+    $("ref-meta").textContent = clip
+      ? [clip.name, clip.duration ? fmtSec(clip.duration) : null, clip.width && clip.height ? `${clip.width} × ${clip.height}` : null, clip.fps ? `${Math.round(clip.fps)} fps` : null].filter(Boolean).join(" · ")
+      : refOn && rv ? `${rv.name} was added for its script only. Add it again to copy its performance.` : "";
+    $("ref-meta").hidden = !$("ref-meta").textContent;
+    const refScript = clip && state.refScript?.for === clip.id ? state.refScript : null;
+    $("ref-script-box").hidden = !scriptMode || !clip;
+    if (scriptMode && clip) {
+      const ta2 = $("ref-script");
+      const t = refScript?.text || "";
+      if (ta2.value !== t) ta2.value = t;
+      ta2.placeholder = refScript?.failed ? "No script could be read from this clip." : falReady() ? "Press Read the script." : "Add a fal.ai key in the key panel to read the script.";
+      $("btn-read-script").hidden = Boolean(refScript?.text);
+      $("btn-read-script").disabled = Boolean(busy.ref);
+      $("btn-copy-script").hidden = !refScript?.text;
+    }
+
+    // ---- Step 4: voice ----
     const a = state.audio;
     $("drop-voice").hidden = Boolean(a);
     $("voice-panel").hidden = !a;
@@ -2008,9 +2333,16 @@
 
     renderBusy();
 
-    // ---- Step 4: episode ----
+    // ---- Step 5: episode ----
     updateChips("chips-quality", state.quality, Boolean(busy.video));
-    updateChips("chips-camera", state.camera, Boolean(busy.video));
+    updateChips("chips-camera", state.camera, Boolean(busy.video) || refActive());
+    $("camera-hint").hidden = !refActive();
+    $("ing-ref").hidden = state.refMode !== "performance";
+    if (state.refMode === "performance") {
+      setIngredient("ing-ref", refActive()
+        ? { text: `${rv.name}, copying its movement and camera`, stateClass: "is-done" }
+        : { text: rv?.url ? "Tick the rights box in step 3" : "Waiting for the reference clip", stateClass: busy.ref ? "is-busy" : "is-wait" });
+    }
     const ch = characterDetails();
     const sc = sceneDetails();
     const D = clipDuration();
@@ -2054,8 +2386,13 @@
     $("fact-length").textContent = D ? `${D} seconds` : "Follows the recording";
     $("fact-format").textContent = ASPECTS[state.backgroundAspect || FORMATS[state.format].aspect];
 
-    const missing = [!characterInput() && "character sheet", !state.backgroundUrl && "studio set", !a && "voice recording"].filter(Boolean);
-    const otherBusy = busy.character || busy.background || busy.audio;
+    const missing = [
+      !characterInput() && "character sheet",
+      !state.backgroundUrl && "studio set",
+      state.refMode === "performance" && !refActive() && "reference clip (or switch it off)",
+      !a && "voice recording",
+    ].filter(Boolean);
+    const otherBusy = busy.character || busy.background || busy.ref || busy.audio;
     const ready = missing.length === 0;
     $("btn-episode").disabled = !ready || Boolean(busy.video) || Boolean(otherBusy);
     $("btn-episode").textContent = state.result ? "Create a new clip" : "Create episode clip";
@@ -2094,6 +2431,10 @@
     renderStep("set",
       busy.background ? "is-busy" : state.backgroundUrl ? "is-done" : state.characterUrl ? "is-next" : "",
       busy.background ? "Working…" : state.backgroundUrl ? "Ready" : library.sets.length ? "Pick, upload or create" : "Upload or create");
+    const refDone = scriptMode ? Boolean(refScript?.text) : refActive();
+    renderStep("ref",
+      busy.ref ? "is-busy" : !refOn ? "" : refDone ? "is-done" : "is-next",
+      busy.ref ? "Working…" : !refOn ? "Optional" : refDone ? (scriptMode ? "Script ready" : "Copying performance") : clip ? (scriptMode ? "Read the script" : "Tick the rights box") : "Add a clip");
     renderStep("voice",
       busy.audio ? "is-busy" : a ? "is-done" : state.characterUrl && state.backgroundUrl ? "is-next" : "",
       busy.audio ? "Preparing…" : a ? fmtSec(audioSeconds()) : "Add an MP4");
@@ -2107,6 +2448,7 @@
   // ===========================================================================
 
   function openKeyPanel(message) {
+    clearTimeout(keyCloseTimer); // a step that needs another key can reopen the panel right after a save
     $("key-panel").hidden = false;
     $("input-kie-key").value = getKieKey();
     $("input-fal-key").value = getKey();
@@ -2250,12 +2592,34 @@
       renderPromptBox("set");
     });
 
-    // Step 3
+    // Step 3: reference video
+    buildChips("chips-refmode", REF_MODES, "refMode");
+    bindFileInput($("file-ref"), onRefVideo);
+    bindDrop($("drop-ref"), $("file-ref"), onRefVideo, { target: $("media-ref"), enabled: () => state.refMode !== "off" });
+    $("btn-choose-ref").addEventListener("click", () => $("file-ref").click());
+    $("opt-ref-rights").addEventListener("change", (e) => {
+      state.refRights = e.target.checked;
+      save();
+      render();
+    });
+    $("btn-read-script").addEventListener("click", readRefScript);
+    $("btn-copy-script").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText($("ref-script").value);
+        $("btn-copy-script").textContent = "Copied";
+      } catch {
+        $("ref-script").select();
+        $("btn-copy-script").textContent = "Press Ctrl+C";
+      }
+      setTimeout(() => { $("btn-copy-script").textContent = "Copy script"; }, 1600);
+    });
+
+    // Step 4: voice
     bindFileInput($("file-voice"), onAudio);
     bindDrop($("drop-voice"), $("file-voice"), onAudio, { target: $("media-voice") });
     $("btn-choose-voice").addEventListener("click", () => $("file-voice").click());
 
-    // Step 4
+    // Step 5: episode
     $("btn-episode").addEventListener("click", createEpisode);
     $("btn-retake").addEventListener("click", () => {
       createEpisode();
@@ -2315,7 +2679,7 @@
       }
       setStatus("status-key", "Saved in this browser.", "ok");
       render();
-      setTimeout(closeKeyPanel, 700);
+      keyCloseTimer = setTimeout(closeKeyPanel, 700);
       const action = pendingKeyAction;
       pendingKeyAction = null;
       if (action) action();
@@ -2343,7 +2707,7 @@
     });
 
     window.addEventListener("beforeunload", (e) => {
-      if (busy.character || busy.background || busy.audio) {
+      if (busy.character || busy.background || busy.ref || busy.audio) {
         e.preventDefault();
         e.returnValue = "";
       }

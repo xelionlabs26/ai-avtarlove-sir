@@ -103,7 +103,7 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
 /* ---------- stepper ---------- */
 .stepper { margin-bottom: 20px; }
 .stepper ol {
-  list-style: none; margin: 0; padding: 6px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  list-style: none; margin: 0; padding: 6px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
 }
 .stepper a {
@@ -565,3 +565,32 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   .segmented.segmented-3 button { font-size: 0.78rem; padding: 4px 6px; }
 }
 @media (max-width: 380px) { .set-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- reference video ---------- */
+.optional {
+  display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; vertical-align: middle;
+  background: var(--surface-3); color: var(--muted); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+}
+.media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.ref-meta { text-align: center; }
+.script-text {
+  width: 100%; min-height: 130px; resize: vertical; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface-2); font: inherit; font-size: 0.92rem; line-height: 1.6; color: var(--text);
+}
+@media (max-width: 1020px) and (min-width: 641px) {
+  .stepper a { gap: 8px; padding: 8px; }
+  .step-dot { width: 26px; height: 26px; }
+}
+.consent {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface-2); font-size: 0.88rem; color: var(--text-2); cursor: pointer;
+}
+.consent input { flex: none; width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--accent); }
+/* On phones the three reference choices stack, so their labels stay whole. */
+@media (max-width: 640px) {
+  .chips.chips-stack { grid-template-columns: 1fr; }
+  .chips-stack .chip { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; }
+  .chips-stack .chip b { flex: none; }
+  .chips-stack .chip small { min-width: 0; }
+}
+@media (pointer: coarse) { .script-text { font-size: 16px; } }

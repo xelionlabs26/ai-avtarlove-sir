@@ -74,8 +74,9 @@
       <ol>
         <li data-step="character"><a href="#step-character"><span class="step-dot">1</span><span class="step-text"><b>Architect</b><small></small></span></a></li>
         <li data-step="set"><a href="#step-set"><span class="step-dot">2</span><span class="step-text"><b>Studio set</b><small></small></span></a></li>
-        <li data-step="voice"><a href="#step-voice"><span class="step-dot">3</span><span class="step-text"><b>Voice</b><small></small></span></a></li>
-        <li data-step="episode"><a href="#step-episode"><span class="step-dot">4</span><span class="step-text"><b>Episode clip</b><small></small></span></a></li>
+        <li data-step="ref"><a href="#step-ref"><span class="step-dot">3</span><span class="step-text"><b>Reference</b><small></small></span></a></li>
+        <li data-step="voice"><a href="#step-voice"><span class="step-dot">4</span><span class="step-text"><b>Voice</b><small></small></span></a></li>
+        <li data-step="episode"><a href="#step-episode"><span class="step-dot">5</span><span class="step-text"><b>Episode clip</b><small></small></span></a></li>
       </ol>
     </nav>
 
@@ -298,10 +299,69 @@
       </div>
     </section>
 
-    <!-- ===================== 3. VOICE ===================== -->
-    <section class="card step" id="step-voice" aria-labelledby="h-voice">
+    <!-- ===================== 3. REFERENCE VIDEO (OPTIONAL) ===================== -->
+    <section class="card step" id="step-ref" aria-labelledby="h-ref">
       <header class="card-head">
         <span class="num">3</span>
+        <div>
+          <h2 id="h-ref">Reference video <span class="optional">optional</span></h2>
+          <p class="muted">Guide the clip with another video: copy its movement and camera, or take its script.</p>
+        </div>
+      </header>
+
+      <div class="step-grid">
+        <div class="step-controls">
+          <div class="field">
+            <span class="field-label" id="lbl-refmode">Use a reference</span>
+            <div class="chips chips-3 chips-stack" id="chips-refmode" role="radiogroup" aria-labelledby="lbl-refmode"></div>
+          </div>
+          <div class="panel" id="ref-body">
+            <p class="notice" id="ref-face-note">Seedance refuses reference videos that show a real, identifiable person's face. Use a clip in which no real face can be recognised, for example an AI-made performer or someone filmed from behind. Only the movement is copied, never the person.</p>
+            <label class="consent">
+              <input type="checkbox" id="opt-ref-rights" />
+              <span>I have the right to use this clip and its words. The app never reuses another person's voice: a script is only text for the architect to record.</span>
+            </label>
+            <div class="actions">
+              <button class="btn btn-primary" id="btn-choose-ref" type="button" disabled>Choose reference video</button>
+            </div>
+            <p class="hint" id="ref-limits"></p>
+            <div class="field" id="ref-script-box" hidden>
+              <label class="field-label" for="ref-script">Script</label>
+              <textarea class="script-text" id="ref-script" rows="6" readonly spellcheck="false"></textarea>
+              <div class="actions">
+                <button class="btn btn-small" id="btn-read-script" type="button">Read the script</button>
+                <button class="btn btn-small btn-quiet" id="btn-copy-script" type="button" hidden>Copy script</button>
+              </div>
+              <p class="hint">Record these words in step 4, in the architect's own voice. Reading the script uses a fal.ai key.</p>
+            </div>
+          </div>
+          <p class="status" id="status-ref" role="status"></p>
+          <input type="file" id="file-ref" accept=".mp4,.mov,video/mp4,video/quicktime" hidden />
+        </div>
+
+        <div class="step-preview">
+          <div class="media media-tall" id="media-ref">
+            <video id="ref-video" controls muted playsinline preload="metadata" hidden></video>
+            <div class="dropzone" id="drop-ref" role="button" tabindex="0" aria-label="Upload the reference video" hidden>
+              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v12H4zM15 10l5-3v10l-5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg>
+              <strong>Drop the reference video here</strong>
+              <span>or tap to choose · MP4 or MOV</span>
+            </div>
+            <div class="placeholder" id="ph-ref">
+              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v12H4zM15 10l5-3v10l-5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg>
+              <p>Off. Choose "Copy the performance" or "Use the script" to add a clip.</p>
+            </div>
+            <div class="busy" id="busy-ref" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>
+          </div>
+          <p class="hint ref-meta" id="ref-meta" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 4. VOICE ===================== -->
+    <section class="card step" id="step-voice" aria-labelledby="h-voice">
+      <header class="card-head">
+        <span class="num">4</span>
         <div>
           <h2 id="h-voice">Voice</h2>
           <p class="muted">The architect's own voice as an MP4, 2 to 30 seconds. The video follows it word for word.</p>
@@ -344,13 +404,13 @@
       </div>
     </section>
 
-    <!-- ===================== 4. EPISODE ===================== -->
+    <!-- ===================== 5. EPISODE ===================== -->
     <section class="card" id="step-episode" aria-labelledby="h-episode">
       <header class="card-head">
-        <span class="num">4</span>
+        <span class="num">5</span>
         <div>
           <h2 id="h-episode">Episode clip</h2>
-          <p class="muted">The prompt, clip length and camera cuts are written automatically from steps 1 to 3.</p>
+          <p class="muted">The prompt, clip length and camera are written automatically from steps 1 to 4.</p>
         </div>
       </header>
 
@@ -366,6 +426,11 @@
             <span class="ing-text"><b>Studio set</b><small></small></span>
             <span class="ing-state" aria-hidden="true"></span>
           </li>
+          <li id="ing-ref" hidden>
+            <span class="ing-thumb ing-thumb-voice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v12H4zM15 10l5-3v10l-5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg></span>
+            <span class="ing-text"><b>Reference video</b><small></small></span>
+            <span class="ing-state" aria-hidden="true"></span>
+          </li>
           <li id="ing-voice">
             <span class="ing-thumb ing-thumb-voice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span>
             <span class="ing-text"><b>Voice and camera cuts</b><small></small></span>
@@ -377,6 +442,7 @@
           <div class="field">
             <span class="field-label" id="lbl-camera">Camera</span>
             <div class="chips chips-2" id="chips-camera" role="radiogroup" aria-labelledby="lbl-camera"></div>
+            <p class="hint" id="camera-hint" hidden>The camera follows the reference video.</p>
           </div>
           <div class="field">
             <span class="field-label" id="lbl-quality">Quality</span>
