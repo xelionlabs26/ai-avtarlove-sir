@@ -535,3 +535,33 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   .filter-chip { min-height: 40px; }
 }
 @media (pointer: coarse) { .filter-chip { min-height: 42px; } }
+
+/* ---------- set library ---------- */
+.segmented.segmented-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.segmented button[hidden] { display: none !important; }
+.set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+.set-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px; text-align: left; cursor: pointer; min-width: 0;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font: inherit; color: var(--text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.set-card:hover { border-color: var(--line-strong); }
+.set-card[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.set-card:disabled { opacity: 0.55; cursor: not-allowed; }
+.set-thumb { position: relative; display: block; aspect-ratio: 9 / 16; border-radius: 8px; overflow: hidden; background: var(--surface-3); }
+.set-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.set-card.is-used .set-thumb::after {
+  content: "In use"; position: absolute; left: 6px; top: 6px; padding: 2px 8px; border-radius: 999px;
+  background: var(--ok); color: #fff; font-size: 0.68rem; font-weight: 800;
+}
+.set-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 0 2px 2px; }
+.set-text b { font-size: 0.82rem; line-height: 1.25; }
+.set-badge { align-self: flex-start; font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.set-badge.is-ready { background: var(--ok-soft); color: var(--ok); }
+.set-badge.is-room { background: var(--warn-soft); color: var(--warn); }
+.room-actions { display: flex; flex-direction: column; gap: 14px; }
+@media (max-width: 640px) {
+  .set-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .segmented.segmented-3 button { font-size: 0.78rem; padding: 4px 6px; }
+}
+@media (max-width: 380px) { .set-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

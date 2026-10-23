@@ -187,15 +187,34 @@
         <span class="num">2</span>
         <div>
           <h2 id="h-set">Studio set</h2>
-          <p class="muted">An empty podcast set with a free chair and a microphone, seen wide like a real podcast studio.</p>
+          <p class="muted">An empty podcast set with a free chair and a microphone. Pick one of your presets, upload your own, or create one.</p>
         </div>
       </header>
 
       <div class="step-grid">
         <div class="step-controls">
-          <div class="segmented" role="tablist" aria-label="Studio set">
+          <div class="segmented" id="set-tabs" role="tablist" aria-label="Studio set">
+            <button type="button" role="tab" id="tab-set-library" data-group="setMode" data-mode="library">Library</button>
             <button type="button" role="tab" id="tab-set-upload" data-group="setMode" data-mode="upload">I have a set image</button>
             <button type="button" role="tab" id="tab-set-create" data-group="setMode" data-mode="create">Create a set</button>
+          </div>
+
+          <div class="panel" id="panel-set-library" role="tabpanel" aria-labelledby="tab-set-library">
+            <p class="panel-text">Pick one of your preset sets. Picking is free, and the video prompt describes the set automatically.</p>
+            <div class="set-grid" id="set-grid" role="radiogroup" aria-label="Preset sets"></div>
+            <p class="hint" id="set-library-empty" hidden>No preset sets yet. Add images and entries to library/sets.json.</p>
+            <div class="room-actions" id="room-actions" hidden>
+              <p class="notice">This image is a room without the podcast chair and mic. Add them, or use the room as it is.</p>
+              <div class="field">
+                <span class="field-label" id="lbl-chair-lib">Chair to add</span>
+                <div class="chips" id="chips-chair-lib" role="radiogroup" aria-labelledby="lbl-chair-lib"></div>
+              </div>
+              <div class="actions">
+                <button class="btn btn-primary" id="btn-add-chair" type="button">Add chair and mic</button>
+                <span class="cost">Uses kie.ai credits</span>
+                <button class="btn btn-quiet" id="btn-use-room" type="button">Use without changes</button>
+              </div>
+            </div>
           </div>
 
           <div class="panel" id="panel-set-upload" role="tabpanel" aria-labelledby="tab-set-upload">
@@ -264,6 +283,10 @@
               <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
               <strong>Drop the set image here</strong>
               <span>or tap to choose · JPG, PNG or WebP</span>
+            </div>
+            <div class="placeholder" id="ph-set-library" hidden>
+              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h7v7H4zM13 5h7v7h-7zM4 14h7v5H4zM13 14h7v5h-7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" /></svg>
+              <p>Pick a set from the library to see it here.</p>
             </div>
             <div class="placeholder placeholder-ref" id="ph-set">
               <img src="reference/podcast-set-framing.jpg" alt="" />

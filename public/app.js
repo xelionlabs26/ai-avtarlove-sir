@@ -222,7 +222,10 @@
     characterLook: null,
     characterInfo: null, // { for, face, outfit, layout } or { for, failed }
 
-    setMode: "upload", // "upload" | "create"
+    setMode: "library", // "library" | "upload" | "create"
+    libraryId: null, // preset set picked in the Library tab
+    backgroundLibraryId: null, // preset set the current background came from
+    backgroundChair: null, // chair added by "Add chair and mic"
     setStyle: "studio",
     chair: "velvet",
     light: "day",
@@ -232,7 +235,7 @@
     setNotes: "",
     customSetPrompt: null,
     backgroundUrl: null,
-    backgroundSource: null,
+    backgroundSource: null, // "library" | "library-edited" | "generated" | "uploaded"
     backgroundAspect: null,
     backgroundRead: null, // description of a generated set, used if reading the image fails
     sceneInfo: null, // { for, setting, seat, microphone, lighting } or { for, failed }
@@ -255,7 +258,12 @@
   const enums = [["speaker", SPEAKERS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES], ["camera", CAMERAS]];
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
-  if (!["upload", "create"].includes(state.setMode)) state.setMode = "upload";
+  if (!["library", "upload", "create"].includes(state.setMode)) state.setMode = "library";
+  // The set library is new: show it first unless a set is already in use.
+  if (!saved.setLibraryV) {
+    if (!saved.backgroundUrl) state.setMode = "library";
+    state.setLibraryV = 1;
+  }
   if (!PROVIDERS[state.provider]) state.provider = "kie";
   // Before the outfit library, the chosen "Look" only affected new sheets. Carry a non-default look over once.
   if (!saved.outfitsV) {
@@ -657,6 +665,21 @@
     return { mode: "override", outfit: chosen, image: chosen.image };
   }
 
+  const isLibrarySource = () => state.backgroundSource === "library" || state.backgroundSource === "library-edited";
+  // What to show for the current set: the app's own copy for unedited library sets (fast, never expires).
+  const setDisplayUrl = () => (state.backgroundSource === "library" && setById(state.backgroundLibraryId)?.image) || state.backgroundUrl;
+
+  /** Prompt for "Add chair and mic": puts the podcast chair and boom-arm mic into a plain room photo. */
+  function addChairPrompt(chair) {
+    return [
+      "Edit this photograph of a room. Keep the room, its walls, furniture, props, light, colours and the camera position exactly as they are.",
+      `Add, in the foreground, an empty ${chair}, placed in the lower half of the frame, right of centre and turned slightly to the left, large in the frame as if the camera were about one and a half metres away; the front of the seat may be cut off by the bottom edge.`,
+      "Add a black broadcast dynamic microphone on a black boom arm entering from the left edge at about 45 percent of the frame height and hanging down just above the top-left of the chair's backrest, where a seated person's mouth would be.",
+      "Match the room's lighting, shadows, perspective and colour so the chair and the microphone look naturally part of the photo.",
+      "No people, no hands, no text, no logos, no watermark. Photorealistic.",
+    ].join(" ");
+  }
+
   const UPLOAD_TTL = { kie: 12 * 3600e3, fal: 24 * 3600e3 };
 
   /** Uploads a file shipped with the app (library image, framing reference) once per provider and reuses the link. */
@@ -738,6 +761,25 @@
   }
 
   function sceneDetails() {
+    if (isLibrarySource()) {
+      const e = setById(state.backgroundLibraryId);
+      if (e) {
+        const edited = state.backgroundSource === "library-edited";
+        const seat = edited ? state.backgroundChair : e.hasChairAndMic ? e.seat : null;
+        const mic = edited ? true : e.microphone;
+        const extras = [seat ? `a ${seat.replace(/^(a|an|the)\s+/i, "")}` : null, mic ? "a black broadcast microphone on a boom arm" : null].filter(Boolean);
+        return {
+          scene: extras.length ? `${e.scene}, with ${extras.join(" and ")}` : e.scene,
+          setting: e.scene,
+          seat,
+          microphone: mic,
+          light: e.light,
+          lighting: null,
+          source: "library",
+          name: e.name,
+        };
+      }
+    }
     const info = state.sceneInfo;
     if (info && info.for === state.backgroundUrl && !info.failed) return { ...info, source: "analysis" };
     if (state.backgroundSource === "generated" && state.backgroundRead) return { ...state.backgroundRead, source: "preset" };
@@ -956,6 +998,7 @@
   }
 
   function analyseScene() {
+    if (isLibrarySource()) return null;
     const url = state.backgroundUrl;
     if (!url || !falReady()) return null;
     return track("scene", async () => {
@@ -1005,7 +1048,7 @@
   function refreshAnalyses(force = false) {
     if (!falReady()) return;
     if (state.characterUrl && !pending.character && (force || state.characterInfo?.for !== state.characterUrl)) analyseCharacter();
-    if (state.backgroundUrl && !pending.scene && (force || state.sceneInfo?.for !== state.backgroundUrl)) analyseScene();
+    if (state.backgroundUrl && !isLibrarySource() && !pending.scene && (force || state.sceneInfo?.for !== state.backgroundUrl)) analyseScene();
     if (state.audio?.url && !pending.transcript && (force || state.transcript?.for !== state.audio.url)) transcribeAudio();
   }
 
@@ -1246,7 +1289,7 @@
       const url = r?.images?.[0]?.url;
       if (!url) throw new Error("No image came back. Please try again.");
       Object.assign(state, {
-        backgroundUrl: url, backgroundSource: "generated", backgroundAspect: fmt.aspect, backgroundRead: read, sceneInfo: null,
+        backgroundUrl: url, backgroundSource: "generated", backgroundAspect: fmt.aspect, backgroundRead: read, sceneInfo: null, libraryId: null,
       });
       save();
       setStatus("status-set", "Studio set ready.", "ok");
@@ -1257,6 +1300,86 @@
       setBusy("background", null);
       render();
     }
+  }
+
+  async function onLibraryPick(id) {
+    const e = setById(id);
+    if (!e || busy.background) return;
+    state.libraryId = id;
+    save();
+    setStatus("status-set", "");
+    render();
+    if (!e.hasChairAndMic) return setStatus("status-set", "This one is a room only. Add the chair and mic, or use it as it is.");
+    await useLibrarySet(id);
+  }
+
+  async function useLibrarySet(id) {
+    const e = setById(id);
+    if (!e || busy.background) return;
+    if (!ensureKey(() => useLibrarySet(id))) return;
+    setStatus("status-set", "");
+    setBusy("background", "Adding the set from the library…");
+    render();
+    try {
+      const url = await libraryUpload(e.image);
+      Object.assign(state, {
+        backgroundUrl: url, backgroundSource: "library", backgroundLibraryId: e.id, backgroundChair: null,
+        backgroundAspect: e.aspect, backgroundRead: null, sceneInfo: null, libraryId: e.id,
+      });
+      save();
+      setStatus("status-set", `${e.name} is your set.`, "ok");
+    } catch (err) {
+      setStatus("status-set", err.message, "error");
+    } finally {
+      setBusy("background", null);
+      render();
+    }
+  }
+
+  async function addChairAndMic() {
+    const e = setById(state.libraryId);
+    if (!e || busy.background) return;
+    if (!ensureKey(addChairAndMic)) return;
+    const chair = chairName();
+    setStatus("status-set", "");
+    setBusy("background", "Adding the chair and mic…");
+    render();
+    try {
+      const src = await libraryUpload(e.image);
+      const r = await runJob(
+        "imageEdit",
+        { prompt: addChairPrompt(chair), image_urls: [src], aspect_ratio: e.aspect, resolution: "2K", output_format: "png", num_images: 1 },
+        (st) => { setBusy("background", `Adding the chair and mic, ${describe(st)}…`); renderBusy(); },
+      );
+      const url = r?.images?.[0]?.url;
+      if (!url) throw new Error("No image came back. Please try again.");
+      Object.assign(state, {
+        backgroundUrl: url, backgroundSource: "library-edited", backgroundLibraryId: e.id, backgroundChair: chair,
+        backgroundAspect: e.aspect, backgroundRead: null, sceneInfo: null,
+      });
+      save();
+      setStatus("status-set", "Chair and mic added.", "ok");
+    } catch (err) {
+      setStatus("status-set", err.message, "error");
+    } finally {
+      setBusy("background", null);
+      render();
+    }
+  }
+
+  /** Library sets are re-uploaded when their link may have expired (kie.ai keeps uploads for a limited time). */
+  async function freshBackgroundUrl() {
+    if (state.backgroundSource === "library") {
+      const e = setById(state.backgroundLibraryId);
+      if (e) {
+        const url = await libraryUpload(e.image);
+        if (url !== state.backgroundUrl) {
+          state.backgroundUrl = url;
+          save();
+        }
+      }
+    }
+    return state.backgroundUrl;
   }
 
   async function onOwnBackground(file) {
@@ -1270,7 +1393,7 @@
       const size = await imageSize(file);
       const { url } = await uploadFile(file);
       Object.assign(state, {
-        backgroundUrl: url, backgroundSource: "uploaded", backgroundRead: null, sceneInfo: null,
+        backgroundUrl: url, backgroundSource: "uploaded", backgroundRead: null, sceneInfo: null, libraryId: null,
         backgroundAspect: (size && nearestAspect(size.w, size.h)) || FORMATS[state.format].aspect,
       });
       save();
@@ -1383,7 +1506,7 @@
       await Promise.allSettled(Object.values(pending).filter(Boolean));
       const D = clipDuration();
       const aspect = state.backgroundAspect || FORMATS[state.format].aspect;
-      const images = [characterInput(), state.backgroundUrl];
+      const images = [characterInput(), await freshBackgroundUrl()];
       const plan = outfitPlan();
       if (plan.mode === "override" && plan.image) {
         setBusy("video", "Adding the outfit reference…", "prompt");
@@ -1511,6 +1634,60 @@
   }
 
   let outfitGridKey = "";
+  let setGridKey = "";
+
+  function renderSetLibrary() {
+    const key = JSON.stringify(library.sets.map((x) => [x.id, x.thumb, x.name, x.hasChairAndMic]));
+    if (key !== setGridKey) {
+      setGridKey = key;
+      const grid = $("set-grid");
+      grid.innerHTML = "";
+      for (const e of library.sets) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "set-card";
+        b.setAttribute("role", "radio");
+        b.dataset.value = e.id;
+        const v = document.createElement("span");
+        v.className = "set-thumb";
+        const img = document.createElement("img");
+        img.src = e.thumb;
+        img.alt = "";
+        img.loading = "lazy";
+        v.appendChild(img);
+        const t = document.createElement("span");
+        t.className = "set-text";
+        const n = document.createElement("b");
+        n.textContent = e.name;
+        const badge = document.createElement("small");
+        badge.className = `set-badge ${e.hasChairAndMic ? "is-ready" : "is-room"}`;
+        badge.textContent = e.hasChairAndMic ? "Chair and mic" : "Room only";
+        t.append(n, badge);
+        b.append(v, t);
+        b.addEventListener("click", () => onLibraryPick(e.id));
+        grid.appendChild(b);
+      }
+    }
+    for (const b of $("set-grid").querySelectorAll(".set-card")) {
+      const on = b.dataset.value === state.libraryId;
+      b.setAttribute("aria-checked", String(on));
+      b.tabIndex = on || (!state.libraryId && b === b.parentElement.firstElementChild) ? 0 : -1;
+      b.disabled = Boolean(busy.background);
+      b.classList.toggle("is-used", isLibrarySource() && state.backgroundLibraryId === b.dataset.value);
+    }
+    $("set-library-empty").hidden = !library.loaded || library.sets.length > 0;
+    const picked = setById(state.libraryId);
+    const roomPending = Boolean(picked && !picked.hasChairAndMic && state.setMode === "library");
+    $("room-actions").hidden = !roomPending;
+    if (roomPending) {
+      const chairId = state.chair === "auto" ? SET_STYLES[state.setStyle].chair : state.chair;
+      updateChips("chips-chair-lib", chairId, Boolean(busy.background));
+      const added = state.backgroundSource === "library-edited" && state.backgroundLibraryId === picked.id;
+      $("btn-add-chair").textContent = added ? "Add them again" : "Add chair and mic";
+      $("btn-add-chair").disabled = Boolean(busy.background);
+      $("btn-use-room").disabled = Boolean(busy.background);
+    }
+  }
 
   function visibleOutfits() {
     return library.outfits.filter((o) => o.for.includes(state.speaker) || o.id === state.outfitId);
@@ -1764,8 +1941,15 @@
     renderPromptBox("character");
 
     // ---- Step 2: studio set ----
-    renderTabs("setMode", { upload: "panel-set-upload", create: "panel-set-create" });
+    // Only fall back from the Library tab once the library has finished loading and is really empty.
+    const noLibrary = library.loaded && !library.sets.length;
+    if (noLibrary && state.setMode === "library") state.setMode = state.backgroundSource === "generated" ? "create" : "upload";
+    $("tab-set-library").hidden = noLibrary;
+    $("set-tabs").classList.toggle("segmented-3", !noLibrary);
+    renderTabs("setMode", { library: "panel-set-library", upload: "panel-set-upload", create: "panel-set-create" });
     const createSet = state.setMode === "create";
+    const libMode = state.setMode === "library";
+    renderSetLibrary();
     const setBusyNow = Boolean(busy.background);
     updateChips("chips-style", state.setStyle, setBusyNow);
     updateChips("chips-chair", state.chair, setBusyNow);
@@ -1775,16 +1959,21 @@
     $("opt-reference").checked = state.useReference;
     $("reference-row").hidden = Boolean(FRAMINGS[state.framing].noRoomRef);
     $("opt-reference").disabled = setBusyNow;
-    setImg($("img-set"), state.backgroundUrl);
-    $("drop-set").hidden = Boolean(state.backgroundUrl) || createSet;
-    $("ph-set").hidden = Boolean(state.backgroundUrl) || !createSet;
+    // In the Library tab, a picked room that is not in use yet is previewed from the library file.
+    const pickedSet = libMode ? setById(state.libraryId) : null;
+    const pendingSet = pickedSet && !(isLibrarySource() && state.backgroundLibraryId === pickedSet.id) ? pickedSet : null;
+    const setPreview = pendingSet ? pendingSet.image : setDisplayUrl();
+    setImg($("img-set"), setPreview);
+    $("drop-set").hidden = Boolean(setPreview) || state.setMode !== "upload";
+    $("ph-set").hidden = Boolean(setPreview) || !createSet;
+    $("ph-set-library").hidden = Boolean(setPreview) || !libMode;
     const closeFraming = Boolean(FRAMINGS[state.framing].noRoomRef);
     $("ph-set").classList.toggle("placeholder-ref", !closeFraming);
     $("ph-set").querySelector("img").hidden = closeFraming;
     $("ph-set").querySelector("p").innerHTML = closeFraming
       ? "<b>Talking-head framing</b>Your set appears here after you press Create."
       : "<b>Framing reference</b>Your set appears here after you press Create.";
-    const setAspect = state.backgroundUrl ? state.backgroundAspect : createSet ? FORMATS[state.format].aspect : "9:16";
+    const setAspect = pendingSet ? pendingSet.aspect : state.backgroundUrl ? state.backgroundAspect : createSet ? FORMATS[state.format].aspect : "9:16";
     $("media-set").classList.toggle("media-tall", isPortrait(setAspect));
     $("media-set").classList.toggle("media-wide", !isPortrait(setAspect));
     const btnSet = $("btn-set");
@@ -1847,6 +2036,8 @@
       ? { thumb: null, text: "Waiting for the studio set", stateClass: busy.background ? "is-busy" : "is-wait" }
       : pending.scene
         ? { thumb: state.backgroundUrl, text: "Reading the seat, props and light…", stateClass: "is-busy" }
+        : sc.source === "library"
+          ? { thumb: setDisplayUrl(), text: `From the library: ${sc.name}${state.backgroundSource === "library-edited" ? ", chair and mic added" : ""}`, stateClass: "is-done" }
         : sc.source === "analysis"
           ? { thumb: state.backgroundUrl, text: sc.seat ? `Seat found: ${stripArticle(sc.seat)}` : "Set read, no chair found", stateClass: "is-done" }
           : sc.source === "preset"
@@ -1902,7 +2093,7 @@
       busy.character ? "Working…" : characterInput() ? "Ready" : state.selfieUrl && createChar ? "Selfie added" : "Upload or create");
     renderStep("set",
       busy.background ? "is-busy" : state.backgroundUrl ? "is-done" : state.characterUrl ? "is-next" : "",
-      busy.background ? "Working…" : state.backgroundUrl ? "Ready" : "Upload or create");
+      busy.background ? "Working…" : state.backgroundUrl ? "Ready" : library.sets.length ? "Pick, upload or create" : "Upload or create");
     renderStep("voice",
       busy.audio ? "is-busy" : a ? "is-done" : state.characterUrl && state.backgroundUrl ? "is-next" : "",
       busy.audio ? "Preparing…" : a ? fmtSec(audioSeconds()) : "Add an MP4");
@@ -2004,9 +2195,11 @@
       });
       tab.addEventListener("keydown", (e) => {
         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-        const sibling = [...tab.parentElement.children].find((b) => b !== tab);
-        sibling.focus();
-        sibling.click();
+        const tabs = [...tab.parentElement.children].filter((b) => !b.hidden);
+        const i = tabs.indexOf(tab);
+        const next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+        next.focus();
+        next.click();
       });
     }
 
@@ -2040,6 +2233,11 @@
     });
     $("btn-own-set").addEventListener("click", () => $("file-set").click());
     $("btn-set").addEventListener("click", generateBackground);
+    const libChairs = {};
+    for (const [id, c] of Object.entries(CHAIRS)) if (id !== "auto") libChairs[id] = c;
+    buildChips("chips-chair-lib", libChairs, "chair");
+    $("btn-add-chair").addEventListener("click", addChairAndMic);
+    $("btn-use-room").addEventListener("click", () => useLibrarySet(state.libraryId));
     $("opt-reference").addEventListener("change", (e) => {
       state.useReference = e.target.checked;
       save();
