@@ -491,6 +491,7 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   .prompt-box textarea { line-height: 1.55; }
   .btn-small, .key-pill { min-height: 42px; }
   .btn-quiet { min-height: 44px; }
+  .segmented button { min-height: 44px; }
 }
 @media (max-width: 640px) {
   .key-pill { min-height: 42px; }
@@ -594,3 +595,23 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   .chips-stack .chip small { min-width: 0; }
 }
 @media (pointer: coarse) { .script-text { font-size: 16px; } }
+
+/* ---------- voice: record in the app, or type the words ---------- */
+.recorder { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.btn-record { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.rec-dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: currentColor; }
+.btn-record.is-recording { background: var(--danger); border-color: var(--danger); }
+.btn-record.is-recording .rec-dot { border-radius: 2px; animation: rec-blink 1s ease-in-out infinite; }
+@keyframes rec-blink { 50% { opacity: 0.35; } }
+.rec-meter { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rec-time { font-family: var(--mono); font-size: 0.9rem; font-weight: 700; color: var(--danger); font-variant-numeric: tabular-nums; }
+.rec-level { width: 120px; height: 8px; overflow: hidden; border-radius: 999px; background: var(--surface-3); }
+.rec-level span { display: block; width: 0; height: 100%; background: var(--ok); transition: width 0.08s linear; }
+.tts-text { width: 100%; min-height: 120px; padding: 12px 14px; resize: vertical; line-height: 1.55; font-family: inherit; }
+.tts-voice-row { display: flex; align-items: center; gap: 8px; }
+.tts-voice-row select { flex: 1; min-width: 0; }
+.hint.is-warn { color: var(--warn); }
+@media (max-width: 640px) {
+  .recorder .btn-record { flex: 1 1 100%; min-height: 50px; font-size: 0.98rem; }
+  .rec-meter { flex: 1 1 100%; justify-content: center; }
+}

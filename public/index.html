@@ -54,6 +54,12 @@
         <p class="hint" id="fal-key-hint">With kie.ai, a fal.ai key is optional. It lets the app read the images and the recording to write a sharper prompt. <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">Get a fal.ai key</a></p>
       </div>
 
+      <div class="field">
+        <label class="field-label" for="input-eleven-key">ElevenLabs API key (optional)</label>
+        <input class="text-input mono" type="password" id="input-eleven-key" placeholder="Paste your ElevenLabs key" autocomplete="off" spellcheck="false" />
+        <p class="hint">For "Type the words" in step 4: turns typed words into speech with your ElevenLabs voices. <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener">Get an ElevenLabs key</a></p>
+      </div>
+
       <div class="key-actions">
         <button class="btn btn-primary" id="btn-save-key" type="button">Save</button>
         <button class="btn btn-quiet" id="btn-forget-key" type="button">Remove keys</button>
@@ -331,8 +337,9 @@
               <div class="actions">
                 <button class="btn btn-small" id="btn-read-script" type="button">Read the script</button>
                 <button class="btn btn-small btn-quiet" id="btn-copy-script" type="button" hidden>Copy script</button>
+                <button class="btn btn-small btn-quiet" id="btn-script-to-voice" type="button" hidden>Use for the voice</button>
               </div>
-              <p class="hint">Record these words in step 4, in the architect's own voice. Reading the script uses a fal.ai key.</p>
+              <p class="hint">Record these words in step 4 in the architect's own voice, or press Use for the voice to speak them with ElevenLabs. Reading the script uses a fal.ai key.</p>
             </div>
           </div>
           <p class="status" id="status-ref" role="status"></p>
@@ -364,21 +371,71 @@
         <span class="num">4</span>
         <div>
           <h2 id="h-voice">Voice</h2>
-          <p class="muted">The architect's own voice as an MP4, 2 to 30 seconds. The video follows it word for word.</p>
+          <p class="muted">The architect's voice, 2 to 30 seconds: upload an MP4, record it here, or type the words. The video follows it word for word.</p>
         </div>
       </header>
 
       <div class="step-grid">
         <div class="step-controls">
-          <ul class="tips">
-            <li>Record in a quiet room with the phone close to the mouth.</li>
-            <li>No background music. The voice is used exactly as recorded.</li>
-            <li>The voice is taken out of the MP4 as a clean audio track, so a video or an audio-only MP4 both work.</li>
-            <li>Clip length and camera cuts follow the recording automatically.</li>
-          </ul>
-          <div class="actions">
-            <button class="btn btn-primary" id="btn-choose-voice" type="button">Choose MP4</button>
+          <div class="segmented segmented-3" id="voice-tabs" role="tablist" aria-label="Voice">
+            <button type="button" role="tab" id="tab-voice-upload" data-group="voiceMode" data-mode="upload">Upload MP4</button>
+            <button type="button" role="tab" id="tab-voice-record" data-group="voiceMode" data-mode="record">Record now</button>
+            <button type="button" role="tab" id="tab-voice-tts" data-group="voiceMode" data-mode="tts">Type the words</button>
           </div>
+
+          <div class="panel" id="panel-voice-upload" role="tabpanel" aria-labelledby="tab-voice-upload">
+            <ul class="tips">
+              <li>Record in a quiet room with the phone close to the mouth.</li>
+              <li>No background music. The voice is used exactly as recorded.</li>
+              <li>The voice is taken out of the MP4 as a clean audio track, so a video or an audio-only MP4 both work.</li>
+              <li>Clip length and camera cuts follow the recording automatically.</li>
+            </ul>
+            <div class="actions">
+              <button class="btn btn-primary" id="btn-choose-voice" type="button">Choose MP4</button>
+            </div>
+          </div>
+
+          <div class="panel" id="panel-voice-record" role="tabpanel" aria-labelledby="tab-voice-record" hidden>
+            <ul class="tips">
+              <li>Use a quiet room and keep the phone or microphone close to the mouth.</li>
+              <li>Speak for 2 to 30 seconds. Recording stops by itself at 30 seconds.</li>
+              <li>Silence at the start and the end is cut off.</li>
+            </ul>
+            <div class="recorder">
+              <button class="btn btn-primary btn-record" id="btn-record" type="button"><span class="rec-dot" aria-hidden="true"></span><span class="rec-label">Start recording</span></button>
+              <div class="rec-meter" id="rec-meter" hidden>
+                <span class="rec-time" id="rec-time" aria-live="off">0:00 / 0:30</span>
+                <span class="rec-level" aria-hidden="true"><span id="rec-level-bar"></span></span>
+              </div>
+            </div>
+            <p class="hint">The browser asks to use the microphone the first time.</p>
+          </div>
+
+          <div class="panel" id="panel-voice-tts" role="tabpanel" aria-labelledby="tab-voice-tts" hidden>
+            <div class="field">
+              <label class="field-label" for="tts-text">What should the architect say?</label>
+              <textarea class="text-input tts-text" id="tts-text" rows="5" maxlength="1500" placeholder="Good buildings start by listening to the site. We walk it at dawn and at dusk before we draw a single line."></textarea>
+              <p class="hint" id="tts-estimate"></p>
+            </div>
+            <div class="field">
+              <label class="field-label" for="tts-voice">Voice</label>
+              <div class="tts-voice-row">
+                <select class="text-input" id="tts-voice"></select>
+                <button class="btn btn-small btn-quiet" id="btn-tts-sample" type="button">Play sample</button>
+              </div>
+              <p class="hint" id="tts-voice-hint"></p>
+            </div>
+            <div class="field">
+              <span class="field-label" id="lbl-tts-model">Speech style</span>
+              <div class="chips chips-2" id="chips-tts-model" role="radiogroup" aria-labelledby="lbl-tts-model"></div>
+            </div>
+            <div class="actions">
+              <button class="btn btn-primary" id="btn-tts" type="button">Create voice</button>
+              <button class="btn btn-quiet" id="btn-eleven-key" type="button">Add ElevenLabs key</button>
+            </div>
+            <p class="hint">Uses ElevenLabs credits. Nothing is created until you press Create voice.</p>
+          </div>
+
           <p class="status" id="status-voice" role="status"></p>
           <input type="file" id="file-voice" accept=".mp4,video/mp4,audio/mp4" hidden />
         </div>
@@ -389,6 +446,10 @@
               <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm7 9a7 7 0 0 1-14 0m7 7v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
               <strong>Drop the recording here</strong>
               <span>MP4 only · 2 to 30 seconds</span>
+            </div>
+            <div class="placeholder" id="ph-voice" hidden>
+              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm7 9a7 7 0 0 1-14 0m7 7v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              <p>The voice track appears here.</p>
             </div>
             <div class="voice" id="voice-panel" hidden>
               <div class="voice-top">

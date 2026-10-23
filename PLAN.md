@@ -26,6 +26,12 @@ backgrounds (see [What you add next](#what-you-add-next)).
 
 ---
 
+### Added after the phases
+
+- **Voice, step 4:** besides uploading an MP4, the voice can be recorded in the app (microphone, stops at 30 seconds,
+  silence trimmed) or typed and spoken by ElevenLabs with a voice from the user's own ElevenLabs account. ElevenLabs is
+  optional and uses its own key and credits, only when **Create voice** is pressed.
+
 ## Starting point (before Phase 0)
 
 - **Step 1, Architect:** upload a character sheet, or create one from a selfie with a "Look" (4 fixed outfits) and

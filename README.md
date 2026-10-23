@@ -13,7 +13,7 @@ spent when the user asks.
 | 1. Architect | A ready character sheet (face left, outfit right), and an outfit from the library | From a selfie, with an outfit from the library and optional notes | Puts the chosen outfit in the prompts, or reads the outfit from the sheet |
 | 2. Studio set | A preset from the set library, or your own set image (its shape sets the clip format) | From style, chair, light, framing, format and optional notes, or **Add chair and mic** to a library room | Uses the preset's description, or reads the seat, props and light from the set |
 | 3. Reference video (optional) | A clip to copy its performance, or to take its script | – | Checks the clip against the video model's limits. For a script, takes out the sound and reads the words |
-| 4. Voice | An MP4, 2 to 30 seconds | – | Takes the voice out of the MP4 as a clean audio track, measures it, transcribes it and finds natural pauses |
+| 4. Voice | An MP4, 2 to 30 seconds, or a recording made in the app | Typed words spoken by ElevenLabs (uses ElevenLabs credits) | Makes a clean audio track, measures it, and finds natural pauses for the camera cuts |
 | 5. Episode clip | – | **Create episode clip** | Writes the video prompt, sets the clip length to the recording, and places the camera cuts on pauses or follows the reference clip's camera |
 
 All three prompts (character sheet, studio set, video) are written automatically and can be opened and edited.
@@ -83,9 +83,22 @@ Every field is explained in [public/library/README.md](public/library/README.md)
 
 ### The voice track
 
-The video model receives the voice as audio (`audio_urls`, `@Audio1`), not as a video. The browser decodes the MP4 and
-uploads a mono WAV, which works for audio-only MP4s and for any video codec. If a browser cannot decode the file, the
-MP4 is converted to MP3 on fal.ai instead.
+Step 4 has three ways to add the voice:
+
+- **Upload MP4:** a video or an audio-only MP4, 2 to 30 seconds.
+- **Record now:** records with the microphone of the phone or computer. A timer and a level bar show it is
+  working, recording stops by itself at 30 seconds, and silence at the start and the end is cut off.
+- **Type the words:** ElevenLabs speaks the typed text with a voice from your ElevenLabs account. Add the ElevenLabs
+  key in the key panel; the voice list then loads by itself, with your own voices (clones and designed voices) first.
+  To speak in the architect's own voice, add a clone of their voice in ElevenLabs first, with their permission. The
+  app estimates the length as you type and stops a text that cannot fit 30 seconds before any credits are used.
+  **Natural** (Multilingual v2) also returns the timing of every word, so the camera cuts land on pauses without
+  fal.ai. **Expressive** (Eleven v3) is livelier. A script read from a reference clip in step 3 can be sent here with
+  **Use for the voice**.
+
+Whichever way it comes in, the video model receives the voice as audio (`audio_urls`, `@Audio1`), not as a video. The
+browser decodes it and uploads a mono WAV, which works for audio-only MP4s and for any video codec. If a browser cannot
+decode an MP4, it is converted to MP3 on fal.ai instead.
 
 ### Providers: kie.ai (default) or fal.ai
 
@@ -96,6 +109,10 @@ Pick the provider in the key panel (top right). The images and the Seedance 2.5 
 | Character sheet, and set with the framing reference | `nano-banana-pro` (with `image_input`) | `fal-ai/nano-banana-pro/edit` |
 | Set without the reference | `nano-banana-pro` | `fal-ai/nano-banana-pro` |
 | Video | `bytedance/seedance-2-5` | `bytedance/seedance-2.5/reference-to-video` |
+
+ElevenLabs is optional and only used for **Type the words**. Its calls go straight from the browser to
+`api.elevenlabs.io` (`/v2/voices` for the voice list, `/v1/text-to-speech/<voice>` for speech) with the key in an
+`xi-api-key` header.
 
 kie.ai calls go straight from the browser: uploads to `kieai.redpandaai.co/api/file-stream-upload`, jobs to
 `api.kie.ai/api/v1/jobs/createTask`, and status from `api.kie.ai/api/v1/jobs/recordInfo`. kie.ai keeps uploaded files
@@ -176,7 +193,9 @@ for a key in the browser, exactly like the GitHub Pages version.
   "The images or videos provided may contain likenesses of real people…". ByteDance only allows real people through its
   own verified-portrait programme (a liveness check and signed authorisation on BytePlus ModelArk), which fal.ai does
   not expose. The app explains this refusal when it happens.
-- The recording must be an MP4, 2 to 30 seconds, ideally in a quiet room with no music. It can be a video or audio only.
+- The voice must be 2 to 30 seconds, ideally recorded in a quiet room with no music. An uploaded recording must be an
+  MP4 (video or audio only). Recording in the app needs a browser that can record audio (current Chrome, Safari, Edge
+  or Firefox) and the microphone permission for the site.
 - If an image cannot be read, the prompt falls back to the chosen preset's description. If the recording
   cannot be transcribed, the cuts are spaced evenly.
 - An in-progress video job survives a page reload: the page reconnects to it.
