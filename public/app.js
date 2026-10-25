@@ -168,9 +168,9 @@
   };
 
   const QUALITIES = {
-    "480p": { label: "Draft", hint: "480p" },
-    "720p": { label: "Standard", hint: "720p" },
-    "1080p": { label: "High", hint: "1080p" },
+    "480p": { label: "Test 480p", hint: "Lowest cost" },
+    "720p": { label: "Standard 720p", hint: "Balanced" },
+    "1080p": { label: "Final 1080p", hint: "Highest cost" },
   };
 
   const ASPECTS = {
