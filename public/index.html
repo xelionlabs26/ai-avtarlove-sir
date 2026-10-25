@@ -431,6 +431,7 @@
             <p class="hint" id="tts-credits"></p>
           </div>
 
+          <label class="check-row" id="row-level"><input type="checkbox" id="opt-level" checked /> <span>Even out the loudness (free, done in this browser)</span></label>
           <p class="status" id="status-voice" role="status"></p>
           <input type="file" id="file-voice" accept=".mp4,video/mp4,audio/mp4" hidden />
         </div>
@@ -452,6 +453,11 @@
                 <div class="voice-info"><b id="voice-name"></b><small id="voice-meta"></small></div>
               </div>
               <audio id="voice-audio" controls preload="none"></audio>
+              <div class="voice-tools" id="voice-tools" hidden>
+                <button class="btn btn-small" id="btn-clean-voice" type="button">Remove background noise</button>
+                <button class="btn btn-small btn-quiet" id="btn-original-voice" type="button" hidden>Use the original</button>
+                <span class="hint" id="cost-clean"></span>
+              </div>
               <p class="voice-transcript" id="voice-transcript"></p>
             </div>
             <div class="busy" id="busy-voice" hidden><span class="spinner" aria-hidden="true"></span><span class="busy-text"></span></div>

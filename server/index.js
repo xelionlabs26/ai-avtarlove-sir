@@ -19,6 +19,7 @@ const MODELS = {
   audioConvert: process.env.AUDIO_CONVERT_MODEL || "fal-ai/ffmpeg-api/merge-audios",
   tts: process.env.TTS_MODEL || "fal-ai/elevenlabs/tts/multilingual-v2",
   ttsExpressive: process.env.TTS_EXPRESSIVE_MODEL || "fal-ai/elevenlabs/tts/eleven-v3",
+  isolate: process.env.ISOLATE_MODEL || "fal-ai/elevenlabs/audio-isolation",
 };
 
 if (FAL_KEY) {

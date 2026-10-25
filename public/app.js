@@ -16,6 +16,7 @@
     audioConvert: "fal-ai/ffmpeg-api/merge-audios",
     tts: "fal-ai/elevenlabs/tts/multilingual-v2",
     ttsExpressive: "fal-ai/elevenlabs/tts/eleven-v3",
+    isolate: "fal-ai/elevenlabs/audio-isolation",
   };
 
   // Vision models that read the character sheet and the set, tried in order.
@@ -239,10 +240,11 @@
   const KIE_MODELS = {
     image: "nano-banana-pro", imageEdit: "nano-banana-pro", video: "bytedance/seedance-2-5",
     tts: "elevenlabs/text-to-speech-multilingual-v2", ttsExpressive: "elevenlabs/text-to-dialogue-v3",
+    isolate: "elevenlabs/audio-isolation",
   };
   // Jobs that run on the provider the user picked. The rest (reading images, transcription,
   // audio conversion) are optional helpers that only run with fal.ai credentials.
-  const PROVIDER_KINDS = new Set(["image", "imageEdit", "video", "tts", "ttsExpressive"]);
+  const PROVIDER_KINDS = new Set(["image", "imageEdit", "video", "tts", "ttsExpressive", "isolate"]);
   const PROVIDERS = { kie: "kie.ai", fal: "fal.ai" };
 
   // ===========================================================================
@@ -293,6 +295,7 @@
     refScript: null, // { for: refVideo.id, text, language } or { for, failed }
 
     voiceMode: "upload", // "upload" | "record" | "tts"
+    levelVoice: true, // even out the loudness of uploads and recordings (free, in this browser)
     ttsText: "",
     ttsVoice: null, // id from library/voices.json; null follows the Speaker choice
     ttsCustomVoice: "", // an ElevenLabs voice ID pasted by the user; used instead when set
@@ -503,6 +506,7 @@
 
   /** Converts the app's request (fal.ai field names) into a kie.ai createTask input. */
   function kieInput(kind, input) {
+    if (kind === "isolate") return { audio_url: input.audio_url };
     if (kind === "tts" || kind === "ttsExpressive") {
       const voice = input.voice;
       return kind === "tts" ? { text: input.text, voice, timestamps: true } : { dialogue: [{ text: input.text, voice }], stability: 0.5 };
@@ -548,7 +552,7 @@
     if (!urls.length) throw Object.assign(new Error("kie.ai finished the task without a file."), { status: 400 });
     const result = job.kind === "video"
       ? { video: { url: urls[0] } }
-      : job.kind === "tts" || job.kind === "ttsExpressive"
+      : job.kind === "tts" || job.kind === "ttsExpressive" || job.kind === "isolate"
         ? { audio: { url: urls[0] }, timestamps: out.timestamps || out.alignment || null }
         : { images: urls.map((url) => ({ url })) };
     return { status: "COMPLETED", queuePosition: null, result };
@@ -1349,8 +1353,33 @@
     });
   }
 
+  /**
+   * The gain that brings speech to an even level (about -20 dBFS RMS over the spoken parts) without clipping:
+   * quiet recordings come up, loud ones come down. 1 when there is no clear speech.
+   */
+  function speechGain(buffer, from = 0, to = buffer.length) {
+    const data = buffer.getChannelData(0);
+    const win = Math.max(1, Math.round(buffer.sampleRate * 0.05));
+    let speech = 0;
+    let windows = 0;
+    let peak = 0;
+    for (let w = from; w < to; w += win) {
+      let sum = 0;
+      const end = Math.min(w + win, to);
+      for (let i = w; i < end; i++) {
+        sum += data[i] * data[i];
+        peak = Math.max(peak, Math.abs(data[i]));
+      }
+      const ms = sum / Math.max(1, end - w);
+      if (ms > 0.003 * 0.003) { speech += ms; windows++; }
+    }
+    if (!windows || !peak) return 1;
+    const gain = Math.min(0.1 / Math.sqrt(speech / windows), 0.89 / peak);
+    return Math.max(0.25, Math.min(8, gain));
+  }
+
   /** Encodes an AudioBuffer (or the part of it from sample `from` to `to`) as a mono 16-bit PCM WAV file. */
-  function encodeWav(buffer, maxSeconds, from = 0, to = buffer.length) {
+  function encodeWav(buffer, maxSeconds, from = 0, to = buffer.length, gain = 1) {
     const rate = buffer.sampleRate;
     const len = Math.max(0, Math.min(to - from, Math.round(rate * maxSeconds)));
     const channels = buffer.numberOfChannels;
@@ -1375,7 +1404,7 @@
     str(36, "data");
     out.setUint32(40, len * 2, true);
     for (let i = 0; i < len; i++) {
-      const s = Math.max(-1, Math.min(1, mono[i]));
+      const s = Math.max(-1, Math.min(1, mono[i] * gain));
       out.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
     }
     return new Blob([out], { type: "audio/wav" });
@@ -1665,7 +1694,7 @@
         const buffer = await decodeAudio(file);
         secs = buffer.duration;
         checkLength(secs);
-        wav = encodeWav(buffer, MAX_AUDIO + 0.2);
+        wav = encodeWav(buffer, MAX_AUDIO + 0.2, 0, buffer.length, state.levelVoice ? speechGain(buffer) : 1);
       } catch (err) {
         if (err.userFacing) throw err;
         console.warn("In-browser audio decoding failed, converting on fal.ai instead:", err);
@@ -1692,7 +1721,7 @@
         format = "mp3";
       }
 
-      state.audio = { url, name: file.name || "recording.mp4", duration: secs || null, format };
+      state.audio = { url, name: file.name || "recording.mp4", duration: secs || null, format, leveled: Boolean(wav && state.levelVoice) };
       state.transcript = null;
       save();
       setStatus("status-voice", "Voice track ready. Clip length and camera cuts now follow it.", "ok");
@@ -1795,11 +1824,12 @@
       const range = speechRange(buffer);
       const secs = Math.min(MAX_AUDIO, (range ? range[1] - range[0] : buffer.length) / buffer.sampleRate); // it stops by itself at 30 s
       checkVoiceLength(secs);
-      const wav = encodeWav(buffer, MAX_AUDIO, ...(range || []));
+      const [from, to] = range || [0, buffer.length];
+      const wav = encodeWav(buffer, MAX_AUDIO, from, to, state.levelVoice ? speechGain(buffer, from, to) : 1);
       setBusy("audio", "Uploading the voice track…");
       renderBusy();
       const { url } = await uploadFile(new File([wav], `${fileName.replace(/\.[^.]+$/, "")}-voice.wav`, { type: "audio/wav" }));
-      state.audio = { url, name, duration: secs, format: "wav", source: "recorded" };
+      state.audio = { url, name, duration: secs, format: "wav", source: "recorded", leveled: state.levelVoice };
       state.transcript = null;
       save();
       setStatus("status-voice", "Voice track ready. Clip length and camera cuts now follow it.", "ok");
@@ -1810,6 +1840,44 @@
       setBusy("audio", null);
       render();
     }
+  }
+
+  /** Removes room noise and echo from the voice track (ElevenLabs audio isolation on the chosen provider). */
+  async function cleanVoice() {
+    const a = state.audio;
+    if (!a?.url || busy.audio || rec.recorder || a.source === "tts" || a.cleaned) return;
+    if (!ensureKey(cleanVoice)) return;
+    setStatus("status-voice", "");
+    setBusy("audio", `Removing background noise on ${PROVIDERS[state.provider]}…`);
+    render();
+    try {
+      const r = await runJob("isolate", { audio_url: a.url }, null, 1500);
+      const url = r?.audio?.url || r?.audio_file?.url || (typeof r?.audio === "string" ? r.audio : null);
+      if (!url) throw new Error("No audio came back. Please try again.");
+      if (state.audio?.url !== a.url) return;
+      const words = state.transcript?.for === a.url ? { ...state.transcript, for: url } : null;
+      state.audio = { ...a, url, cleaned: true, originalUrl: a.url, originalFormat: a.format, format: /\.wav(\?|$)/i.test(url) ? "wav" : "mp3" };
+      state.transcript = words;
+      save();
+      setStatus("status-voice", "Background noise removed. The clip will use the cleaned voice.", "ok");
+      if (!state.transcript) transcribeAudio();
+    } catch (err) {
+      setStatus("status-voice", `The background noise could not be removed. ${err.message}`, "error");
+    } finally {
+      setBusy("audio", null);
+      render();
+    }
+  }
+
+  function useOriginalVoice() {
+    const a = state.audio;
+    if (!a?.originalUrl || busy.audio) return;
+    const words = state.transcript?.for === a.url ? { ...state.transcript, for: a.originalUrl } : null;
+    state.audio = { ...a, url: a.originalUrl, format: a.originalFormat || "wav", cleaned: false, originalUrl: null, originalFormat: null };
+    state.transcript = words;
+    save();
+    setStatus("status-voice", "Back to the original voice.", "ok");
+    render();
   }
 
   const recordingSupported = () => Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
@@ -2721,11 +2789,18 @@
     $("btn-choose-voice").textContent = a ? "Replace recording" : "Choose MP4";
     renderRecorder();
     renderTts();
+    $("row-level").hidden = state.voiceMode === "tts";
+    $("opt-level").checked = state.levelVoice;
+    $("voice-tools").hidden = !a || a.source === "tts";
+    $("btn-clean-voice").hidden = Boolean(a?.cleaned);
+    $("btn-clean-voice").disabled = Boolean(busy.audio) || recording;
+    $("btn-original-voice").hidden = !a?.cleaned;
+    $("btn-original-voice").disabled = Boolean(busy.audio);
     if (a) {
       $("voice-name").textContent = a.name;
       const secs = audioSeconds();
       const lang = transcriptReady() ? LANGUAGES[state.transcript.language] : null;
-      $("voice-meta").textContent = [secs ? fmtSec(secs) : null, lang, "voice track ready"].filter(Boolean).join(" · ");
+      $("voice-meta").textContent = [secs ? fmtSec(secs) : null, lang, a.cleaned ? "noise removed" : null, a.leveled ? "loudness evened" : null, "voice track ready"].filter(Boolean).join(" · ");
       const audioEl = $("voice-audio");
       if (audioEl.getAttribute("src") !== a.url) audioEl.src = a.url;
       let line = "";
@@ -3058,6 +3133,13 @@
       render();
     });
     $("btn-tts").addEventListener("click", createSpeech);
+    $("btn-clean-voice").addEventListener("click", cleanVoice);
+    $("btn-original-voice").addEventListener("click", useOriginalVoice);
+    $("opt-level").addEventListener("change", (e) => {
+      state.levelVoice = e.target.checked;
+      save();
+      render();
+    });
 
     // Step 5: episode
     $("btn-episode").addEventListener("click", createEpisode);
