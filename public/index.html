@@ -131,7 +131,7 @@
             </details>
             <div class="actions">
               <button class="btn btn-primary" id="btn-character" type="button">Create character sheet</button>
-              <span class="cost">Uses fal.ai credits</span>
+              <span class="cost" data-cost="image">Uses fal.ai credits</span>
             </div>
           </div>
 
@@ -151,7 +151,7 @@
             <p class="notice" id="outfit-notice" hidden></p>
             <div class="actions" id="outfit-actions" hidden>
               <button class="btn" id="btn-recreate-outfit" type="button">Recreate sheet with this outfit</button>
-              <span class="cost">Uses kie.ai credits</span>
+              <span class="cost" data-cost="image">Uses kie.ai credits</span>
             </div>
           </div>
           <div class="field asset-row" id="asset-row">
@@ -212,7 +212,7 @@
               </div>
               <div class="actions">
                 <button class="btn btn-primary" id="btn-add-chair" type="button">Add chair and mic</button>
-                <span class="cost">Uses kie.ai credits</span>
+                <span class="cost" data-cost="image">Uses kie.ai credits</span>
                 <button class="btn btn-quiet" id="btn-use-room" type="button">Use without changes</button>
               </div>
             </div>
@@ -269,7 +269,7 @@
             </details>
             <div class="actions">
               <button class="btn btn-primary" id="btn-set" type="button">Create studio set</button>
-              <span class="cost">Uses fal.ai credits</span>
+              <span class="cost" data-cost="image">Uses fal.ai credits</span>
             </div>
           </div>
 
@@ -529,6 +529,14 @@
             <div><dt>Format</dt><dd id="fact-format">–</dd></div>
           </dl>
           <button class="btn btn-primary btn-xl" id="btn-episode" type="button" disabled>Create episode clip</button>
+          <p class="cost-line" id="cost-video"></p>
+          <div class="confirm" id="confirm-video" role="alertdialog" aria-labelledby="confirm-video-text" hidden>
+            <p id="confirm-video-text"></p>
+            <div class="actions">
+              <button class="btn btn-primary" id="btn-confirm-video" type="button">Create it</button>
+              <button class="btn btn-quiet" id="btn-cancel-video" type="button">Cancel</button>
+            </div>
+          </div>
           <p class="hint" id="hint-episode"></p>
         </div>
       </div>
@@ -576,7 +584,7 @@
           <button class="btn btn-primary" id="btn-download" type="button">Download MP4</button>
           <button class="btn" id="btn-retake" type="button">Create another take</button>
           <a class="btn btn-quiet" id="link-open" target="_blank" rel="noopener" href="#">Open in a new tab</a>
-          <p class="hint">Another take uses the same inputs and prompt and gives a new variation. It uses fal.ai credits.</p>
+          <p class="hint">Another take uses the same inputs and prompt and gives a new variation, at the cost shown in step 5.</p>
         </div>
       </div>
     </section>

@@ -246,6 +246,8 @@
   // audio conversion) are optional helpers that only run with fal.ai credentials.
   const PROVIDER_KINDS = new Set(["image", "imageEdit", "video", "tts", "ttsExpressive", "isolate"]);
   const PROVIDERS = { kie: "kie.ai", fal: "fal.ai" };
+  // Prices for the estimates, from library/pricing.json (kie.ai in credits, fal.ai in US dollars). This copy is the fallback.
+  const FALLBACK_PRICING = {"asOf": "2026-10-25", "usdPerKieCredit": 0.005, "confirmAboveUsd": 3, "kie": {"unit": "credits", "video": {"480p": 28, "720p": 63, "1080p": 158}, "videoWithReference": {"480p": 17, "720p": 38, "1080p": 95}, "image": 18, "speechPer1000Chars": 12, "upscalePerSecond": 8, "noiseRemovalPerMinute": null}, "fal": {"unit": "usd", "video": {"480p": 0.2205, "720p": 0.473, "1080p": 1.164}, "videoReferenceFactor": 0.6, "image": 0.15, "speechPer1000Chars": 0.1, "upscalePerSecond": 0.02, "noiseRemovalPerMinute": 0.12, "clipCheck": 0.01}};
 
   // ===========================================================================
   // State
@@ -352,7 +354,8 @@
   const rec = { recorder: null, stream: null, started: 0, timer: null, meter: null }; // the recording in progress
 
   // The library: outfits and preset sets, loaded from library/*.json at start-up.
-  const library = { outfits: [FALLBACK_OUTFIT], sets: [], voices: FALLBACK_VOICES, loaded: false };
+  const library = { outfits: [FALLBACK_OUTFIT], sets: [], voices: FALLBACK_VOICES, pricing: FALLBACK_PRICING, loaded: false };
+  let confirmVideo = false; // a clip above the confirmation price waits for a second press
 
   function loadState() {
     try { return JSON.parse(localStorage.getItem(STATE_KEY) || "{}") || {}; } catch { return {}; }
@@ -649,6 +652,19 @@
   const libraryPath = (p) => (typeof p === "string" && p ? (/^https?:\/\//i.test(p) ? p : LIBRARY_ROOT + p.replace(/^\/+/, "")) : null);
   const str = (v, max = 600) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
 
+  /** Takes the numbers from pricing.json over the fallback; anything missing or not a number keeps the fallback. */
+  function mergePricing(base, over) {
+    if (!over || typeof over !== "object") return base;
+    const out = Array.isArray(base) ? [] : {};
+    for (const [k, v] of Object.entries(base)) {
+      const o = over[k];
+      if (v && typeof v === "object") out[k] = mergePricing(v, o);
+      else if (typeof v === "number" || v === null) out[k] = o === null || (typeof o === "number" && Number.isFinite(o) && o >= 0) ? o : v;
+      else out[k] = typeof o === typeof v ? o : v;
+    }
+    return out;
+  }
+
   function sanitizeVoices(list) {
     if (!Array.isArray(list)) return null;
     const out = [];
@@ -722,7 +738,8 @@
         return null;
       }
     };
-    const [o, sets, v] = await Promise.all([get("outfits.json"), get("sets.json"), get("voices.json")]);
+    const [o, sets, v, price] = await Promise.all([get("outfits.json"), get("sets.json"), get("voices.json"), get("pricing.json")]);
+    library.pricing = mergePricing(FALLBACK_PRICING, price);
     library.outfits = sanitizeOutfits(o?.outfits) || [FALLBACK_OUTFIT];
     library.sets = sanitizeSets(sets?.sets);
     library.voices = sanitizeVoices(v?.voices) || FALLBACK_VOICES;
@@ -731,6 +748,39 @@
     if (state.outfitId && !outfitById(state.outfitId)) state.outfitId = null;
     state.look = sheetOutfit().id;
   }
+
+  /**
+   * What a job costs on the chosen provider: { credits, usd } on kie.ai, { usd } on fal.ai, or null when the price is
+   * not listed. Jobs: video { seconds, resolution, refSeconds }, image, speech { chars }, upscale { seconds },
+   * noise { seconds }, check (always on fal.ai).
+   */
+  function cost(kind, opts = {}) {
+    const P = library.pricing;
+    if (kind === "check") return P.fal.clipCheck == null ? null : { usd: P.fal.clipCheck };
+    const kie = state.provider === "kie";
+    const t = kie ? P.kie : P.fal;
+    let units = null;
+    if (kind === "video") {
+      const res = opts.resolution || state.quality;
+      const secs = Number(opts.seconds) || 0;
+      const ref = Number(opts.refSeconds) || 0;
+      if (!secs) return null;
+      units = kie ? (ref ? (secs + ref) * t.videoWithReference[res] : secs * t.video[res]) : (secs + ref) * t.video[res] * (ref ? t.videoReferenceFactor : 1);
+    } else if (kind === "image") units = t.image * (opts.count || 1);
+    else if (kind === "speech") units = t.speechPer1000Chars * ((opts.chars || 0) / 1000);
+    else if (kind === "upscale") units = t.upscalePerSecond == null ? null : t.upscalePerSecond * (opts.seconds || 0);
+    else if (kind === "noise") units = t.noiseRemovalPerMinute == null ? null : t.noiseRemovalPerMinute * ((opts.seconds || 0) / 60);
+    if (units == null || !Number.isFinite(units)) return null;
+    return kie ? { credits: Math.max(1, Math.ceil(units)), usd: Math.ceil(units) * P.usdPerKieCredit } : { usd: units };
+  }
+
+  const fmtUsd = (usd) => (usd < 0.01 ? "under $0.01" : `$${usd < 100 ? usd.toFixed(2) : Math.round(usd)}`);
+  /** "about 630 credits (≈ $3.15)" on kie.ai, "about $4.73" on fal.ai. */
+  const fmtCost = (c) => (!c ? "price not listed" : c.credits != null ? `about ${c.credits.toLocaleString("en")} credits (≈ ${fmtUsd(c.usd)})` : `about ${fmtUsd(c.usd)}`);
+  /** "Uses about 18 credits (≈ $0.09) on kie.ai", or a plain note when the provider lists no price. */
+  const usesText = (c, extra = "") => (c ? `Uses ${fmtCost(c)} on ${PROVIDERS[state.provider]}${extra}` : `${PROVIDERS[state.provider]} lists no price for this; check your dashboard`);
+  const videoCost = (resolution = state.quality) =>
+    cost("video", { resolution, seconds: clipDuration(), refSeconds: refActive() ? Math.ceil(state.refVideo.duration || 0) : 0 });
 
   const outfitById = (id) => library.outfits.find((o) => o.id === id) || null;
   const defaultOutfit = () => library.outfits.find((o) => o.default) || library.outfits[0] || FALLBACK_OUTFIT;
@@ -2181,18 +2231,33 @@
 
   const characterInput = () => assetRef() || state.characterUrl;
 
-  async function createEpisode() {
+  async function createEpisode(opts = {}) {
     if (!(characterInput() && state.backgroundUrl && state.audio?.url) || busy.video) return;
     if (state.refMode === "performance" && !refActive()) {
       return setStatus("status-video", "Add the reference clip in step 3 (and tick the rights box), or switch the reference off.", "error");
     }
-    if (!ensureKey(createEpisode)) return;
+    if (!ensureKey(() => createEpisode(opts))) return;
+    // Problems that would sink the clip come before the cost question.
+    const rv = state.refVideo;
+    if (refActive() && (rv.provider !== state.provider || Date.now() - rv.at > UPLOAD_TTL[state.provider])) {
+      confirmVideo = false;
+      return setStatus("status-video", "The reference clip's upload has expired or belongs to the other provider. Please add it again in step 3.", "error");
+    }
+    const est = videoCost();
+    if (!opts.confirmed && est && est.usd > library.pricing.confirmAboveUsd) {
+      confirmVideo = true;
+      render();
+      $("confirm-video").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return;
+    }
+    confirmVideo = false;
     setStatus("status-video", "");
     setBusy("video", "Finishing the prompt…", "prompt");
     render();
     try {
       refreshAnalyses();
-      await Promise.allSettled(Object.values(pending).filter(Boolean));
+      // Wait for the inputs to be read, but never let a slow helper hold up the clip.
+      await Promise.race([Promise.allSettled(Object.values(pending).filter(Boolean)), sleep(45000)]);
       const D = clipDuration();
       const aspect = state.backgroundAspect || FORMATS[state.format].aspect;
       const images = [characterInput(), await freshBackgroundUrl()];
@@ -2207,12 +2272,6 @@
         throw userError("Add the reference clip in step 3 (and tick the rights box), or switch the reference off.");
       }
       const ref = refActive();
-      if (ref) {
-        const r = state.refVideo;
-        if (r.provider !== state.provider || Date.now() - r.at > UPLOAD_TTL[state.provider]) {
-          throw userError("The reference clip's upload has expired or belongs to the other provider. Please add it again in step 3.");
-        }
-      }
       const input = {
         prompt: promptFor("video"),
         image_urls: images,
@@ -2576,7 +2635,7 @@
     const custom = $("tts-custom-voice");
     if (document.activeElement !== custom && custom.value !== state.ttsCustomVoice) custom.value = state.ttsCustomVoice;
     sel.disabled = Boolean(busy.audio) || Boolean(customVoiceId());
-    $("tts-credits").textContent = `Uses ${PROVIDERS[state.provider]} credits, with the key you already added. Nothing is created until you press Create voice.`;
+    $("tts-credits").textContent = `${usesText(cost("speech", { chars: Math.max(text.length, 1) }), ", with the key you already added")}. Nothing is created until you press Create voice.`;
     updateChips("chips-tts-model", state.ttsModel, Boolean(busy.audio));
     $("btn-tts").disabled = Boolean(busy.audio) || Boolean(rec.recorder) || !text;
     $("btn-tts").textContent = state.audio?.source === "tts" && state.audio.text === text ? "Create again" : "Create voice";
@@ -2674,7 +2733,7 @@
 
   function render() {
     renderKeyPill();
-    for (const el of document.querySelectorAll(".cost")) el.textContent = `Uses ${PROVIDERS[state.provider]} credits`;
+    for (const el of document.querySelectorAll(".cost")) el.textContent = usesText(cost(el.dataset.cost || "image"));
     $("asset-row").hidden = state.provider !== "kie";
 
     // ---- Step 1: architect ----
@@ -2796,6 +2855,7 @@
     $("btn-clean-voice").disabled = Boolean(busy.audio) || recording;
     $("btn-original-voice").hidden = !a?.cleaned;
     $("btn-original-voice").disabled = Boolean(busy.audio);
+    $("cost-clean").textContent = a ? usesText(cost("noise", { seconds: audioSeconds() || 0 })) : "";
     if (a) {
       $("voice-name").textContent = a.name;
       const secs = audioSeconds();
@@ -2817,6 +2877,10 @@
 
     // ---- Step 5: episode ----
     updateChips("chips-quality", state.quality, Boolean(busy.video));
+    for (const chip of $("chips-quality").children) {
+      const c = videoCost(chip.dataset.value);
+      chip.querySelector("small").textContent = c ? `≈ ${fmtUsd(c.usd)} for this clip` : QUALITIES[chip.dataset.value].hint;
+    }
     for (const [id, key] of [["chips-gestures", "gestures"], ["chips-expression", "expression"], ["chips-gaze", "gaze"]]) updateChips(id, state[key], Boolean(busy.video) || refActive());
     $("perf-hint").hidden = !refActive();
     updateChips("chips-camera", state.camera, Boolean(busy.video) || refActive());
@@ -2886,7 +2950,14 @@
         ? `Still needed: ${missing.join(", ")}.`
         : otherBusy
           ? "Waiting for the current step to finish."
-          : `Uses ${PROVIDERS[state.provider]} credits. The prompt and camera cuts are already prepared.`;
+          : "The prompt and camera cuts are already prepared.";
+    const vc = videoCost();
+    const rate = cost("video", { seconds: 1 });
+    $("cost-video").textContent = vc
+      ? `Estimated cost: ${fmtCost(vc)} on ${PROVIDERS[state.provider]} for ${clipDuration()} s at ${state.quality}${refActive() ? ", reference clip included" : ""}.`
+      : rate ? `About ${fmtCost(rate).replace(/^about /, "")} per second at ${state.quality}. The length follows the voice.` : "";
+    $("confirm-video").hidden = !confirmVideo || Boolean(busy.video) || !ready;
+    if (confirmVideo && vc) $("confirm-video-text").textContent = `This ${clipDuration()} s clip at ${state.quality} costs ${fmtCost(vc)}. Create it?`;
 
     renderPromptBox("video");
     const anyFailed =
@@ -3142,7 +3213,12 @@
     });
 
     // Step 5: episode
-    $("btn-episode").addEventListener("click", createEpisode);
+    $("btn-episode").addEventListener("click", () => createEpisode());
+    $("btn-confirm-video").addEventListener("click", () => createEpisode({ confirmed: true }));
+    $("btn-cancel-video").addEventListener("click", () => {
+      confirmVideo = false;
+      render();
+    });
     $("btn-retake").addEventListener("click", () => {
       createEpisode();
       $("step-episode").scrollIntoView({ behavior: "smooth", block: "start" });

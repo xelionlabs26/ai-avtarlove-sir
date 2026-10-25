@@ -5,6 +5,7 @@ The app reads two files from this folder when it starts:
 - `outfits.json` lists the outfits shown in step 1.
 - `sets.json` lists the preset backgrounds shown in step 2.
 - `voices.json` lists the voices for "Type the words" in step 4.
+- `pricing.json` holds the prices behind the cost estimates.
 
 To add an entry, add its image to the right folder, add a block to the JSON file, then commit and push. The site
 updates about a minute later. If a file is missing or has a mistake, the app still works: the outfit list falls back to
@@ -96,3 +97,24 @@ half, slightly right of centre, the mic on a boom arm from the left, the room be
 
 The starting list was taken from public voice listings and has not been tried on kie.ai or fal.ai yet. If a voice is
 refused, replace its `voiceId` with one from the ElevenLabs voice library (filter by Hindi), or remove the entry.
+
+## Prices (`pricing.json`)
+
+The cost estimates on the Create buttons come from this file. kie.ai prices are in credits, fal.ai prices in US dollars.
+Update a number when a provider changes its price; anything left out falls back to the app's built-in copy.
+
+| Field | What it is |
+| --- | --- |
+| `usdPerKieCredit` | Dollars per kie.ai credit (0.005 means 200 credits for $1). |
+| `confirmAboveUsd` | A clip estimated above this many dollars asks for a second press before it is created. |
+| `kie.video` / `fal.video` | Seedance 2.5 per second of video, by resolution. |
+| `kie.videoWithReference` | kie.ai per second when a reference video is used; the reference seconds count too. |
+| `fal.videoReferenceFactor` | fal.ai multiplies by this with a reference video, and counts the reference seconds too. |
+| `image` | One Nano Banana Pro image (character sheet, set, chair and mic, shot preview). |
+| `speechPer1000Chars` | Typed words spoken by ElevenLabs, per 1,000 characters. |
+| `upscalePerSecond` | Upscaling a finished clip, per second. |
+| `noiseRemovalPerMinute` | Removing background noise, per minute of voice. `null` shows "no price listed". |
+| `fal.clipCheck` | One automatic clip check (always on fal.ai). |
+
+The starting prices were taken from the providers' public pages on the date in `asOf`. The provider's dashboard is the
+final word.

@@ -1,0 +1,25 @@
+{
+  "asOf": "2026-10-25",
+  "note": "Approximate prices from the providers' public pages. The provider's own dashboard is the final word.",
+  "usdPerKieCredit": 0.005,
+  "confirmAboveUsd": 3,
+  "kie": {
+    "unit": "credits",
+    "video": { "480p": 28, "720p": 63, "1080p": 158 },
+    "videoWithReference": { "480p": 17, "720p": 38, "1080p": 95 },
+    "image": 18,
+    "speechPer1000Chars": 12,
+    "upscalePerSecond": 8,
+    "noiseRemovalPerMinute": null
+  },
+  "fal": {
+    "unit": "usd",
+    "video": { "480p": 0.2205, "720p": 0.473, "1080p": 1.164 },
+    "videoReferenceFactor": 0.6,
+    "image": 0.15,
+    "speechPer1000Chars": 0.1,
+    "upscalePerSecond": 0.02,
+    "noiseRemovalPerMinute": 0.12,
+    "clipCheck": 0.01
+  }
+}

@@ -619,3 +619,8 @@ body { padding-bottom: env(safe-area-inset-bottom); }
 .check-row input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 .voice-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 @media (pointer: coarse) { .check-row { min-height: 44px; } }
+
+/* ---------- cost estimates ---------- */
+.cost-line { margin: 0; font-size: 0.86rem; font-weight: 600; color: var(--text-2); }
+.confirm { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--warn-soft); color: var(--warn); }
+.confirm p { margin: 0; font-weight: 600; font-size: 0.9rem; }
