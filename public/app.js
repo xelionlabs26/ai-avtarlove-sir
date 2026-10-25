@@ -156,6 +156,23 @@
   const SCRIPT_MAX_SEC = 180;
   const SCRIPT_MAX_BYTES = 250 * 1024 * 1024;
 
+  // How the architect performs, chosen in step 5 and written into the performance paragraph.
+  const GESTURES = {
+    still: { label: "Calm", hint: "Hands at rest" },
+    natural: { label: "Natural", hint: "Some gestures" },
+    expressive: { label: "Expressive", hint: "Lively hands" },
+  };
+  const EXPRESSIONS = {
+    serious: { label: "Serious", hint: "Focused" },
+    warm: { label: "Warm", hint: "Light warmth" },
+    smiling: { label: "Smiling", hint: "Friendly, upbeat" },
+  };
+  const GAZES = {
+    left: { label: "Host, left", hint: "Off camera" },
+    right: { label: "Host, right", hint: "Off camera" },
+    lens: { label: "The camera", hint: "Talks to viewers" },
+  };
+
   const CAMERAS = {
     still: { label: "Still", hint: "One fixed angle" },
     cuts: { label: "Three cuts", hint: "Wide, medium, close" },
@@ -284,6 +301,9 @@
     provider: "kie", // "kie" | "fal"
     quality: "720p",
     camera: "still",
+    gestures: "natural",
+    expression: "warm",
+    gaze: "left",
     customPrompt: null,
     videoJob: null,
     result: null,
@@ -291,7 +311,7 @@
 
   const saved = loadState();
   const state = Object.assign({}, DEFAULTS, saved);
-  const enums = [["refMode", REF_MODES], ["ttsModel", TTS_MODELS], ["speaker", SPEAKERS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES], ["camera", CAMERAS]];
+  const enums = [["refMode", REF_MODES], ["ttsModel", TTS_MODELS], ["speaker", SPEAKERS], ["setStyle", SET_STYLES], ["chair", CHAIRS], ["light", LIGHTS], ["framing", FRAMINGS], ["format", FORMATS], ["quality", QUALITIES], ["camera", CAMERAS], ["gestures", GESTURES], ["expression", EXPRESSIONS], ["gaze", GAZES]];
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "record", "tts"].includes(state.voiceMode)) state.voiceMode = "upload";
@@ -954,15 +974,32 @@
     const mic = sc.microphone !== false;
     const eyes = `${sp.His} eyes stay open, alert and engaged, with only a quick, natural blink every few seconds: ` +
       `never closed for longer than a blink, never half-closed, never squinting.`;
-    const p4 = `${Who} sits back in ${seatName} from @Image2, relaxed and upright, legs apart and feet flat on the floor, body turned a little toward the host. ` +
+    // The performance choices: gestures, expression and where the eyes go.
+    const toHost = state.gaze !== "lens";
+    const side = state.gaze === "right" ? "camera-right" : "camera-left";
+    const hands = {
+      still: `Both hands rest calmly on the armrests for the whole clip; only ${sp.his} head, face and shoulders move a little.`,
+      natural: `Both forearms rest on the armrests. One hand stays relaxed on the armrest near ${sp.his} knee; ` +
+        `the other now and then lifts off the armrest into an open-palm gesture ${toHost ? "toward the host" : "toward the camera"}, then settles back.`,
+      expressive: `${sp.His} hands are lively: one or both often lift off the armrests into open-palm, pointing and counting gestures that follow the words, ` +
+        `then settle again. The gestures stay controlled and natural, never theatrical.`,
+    }[state.gestures] || "";
+    const tone = {
+      serious: `${Who} speaks in a calm, measured, serious tone with a focused, thoughtful expression and no smiling`,
+      warm: `${Who} speaks in a calm, warm, conversational tone with a light, natural warmth in the face`,
+      smiling: `${Who} speaks in a friendly, upbeat tone and smiles often and genuinely`,
+    }[state.expression];
+    const look = toHost
+      ? `${tone}, as if answering a host sitting just off-frame to ${side}. ${sp.His} eyes and face stay turned slightly to ${side}, toward that host, for the whole clip and never look into the lens.`
+      : `${tone}, talking straight to the viewer: ${sp.his} eyes look directly into the lens for the whole clip, like a direct-to-camera social video.`;
+    const p4 = `${Who} sits back in ${seatName} from @Image2, relaxed and upright, legs apart and feet flat on the floor, ${toHost ? "body turned a little toward the host" : "body facing the camera"}. ` +
       `${mic ? `The microphone stays exactly where it is in @Image2 and never covers ${sp.his} mouth. ` : ""}` +
-      `Both forearms rest on the armrests. One hand stays relaxed on the armrest near ${sp.his} knee; ` +
-      `the other now and then lifts off the armrest into an open-palm gesture toward the host, then settles back. ` +
-      `${Who} speaks in a calm, warm, conversational tone, as if answering a host sitting just off-frame to camera-left. ` +
-      `${sp.His} eyes and face stay turned slightly to camera-left, toward that host, for the whole clip and never look into the lens. ` +
+      `${hands} ${look} ` +
       `${sp.His} mouth shapes every word clearly in sync with @Audio1. On key words ${sp.his} eyebrows lift and ${sp.his} head turns or tilts slightly; ` +
       `between phrases ${who} pauses briefly with ${sp.his} mouth closed. ${eyes} ` +
-      `Movements stay small and natural: no big gestures, no exaggerated smiling.`;
+      `${state.gestures === "expressive" ? "Movements stay natural, never theatrical" : "Movements stay small and natural: no big gestures"}; ` +
+      `${state.expression === "smiling" ? "smiles stay natural, never exaggerated" : "no exaggerated smiling"}.`;
+    const ending = { serious: "a calm, assured expression", warm: "a calm, warm expression", smiling: "a warm smile" }[state.expression];
 
     // A reference video replaces the house performance and camera with the clip's own.
     const p4ref = `${Who} sits in ${seatName} from @Image2 and copies the body movement, posture, gestures, head turns, facial expressions and pacing of the person in @Video1, ` +
@@ -988,7 +1025,7 @@
       shots = [
         `Use two hard cuts:`,
         `[0–${a}s] The exact framing of @Image2, same camera position, angle and lens, with ${who} seated in the chair.`,
-        `[${a}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, ending on a calm, assured expression.`,
+        `[${a}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, ending on ${ending}.`,
       ];
       p7 = `${Who}'s face, outfit, lighting and every object in the set stay identical across both cuts.`;
     } else {
@@ -997,7 +1034,7 @@
         `Use three hard cuts:`,
         `[0–${a}s] The exact framing of @Image2, same camera position, angle and lens, with ${who} seated in the chair.`,
         `[${a}–${b}s] Hard cut to a medium close-up from mid-torso up, from the same direction as @Image2, eye-level${mic ? ", with the microphone where it stands in @Image2" : ""}.`,
-        `[${b}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, ending on a calm, assured expression.`,
+        `[${b}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, ending on ${ending}.`,
       ];
       p7 = `${Who}'s face, outfit, lighting and every object in the set stay identical across all three cuts.`;
     }
@@ -2705,6 +2742,8 @@
 
     // ---- Step 5: episode ----
     updateChips("chips-quality", state.quality, Boolean(busy.video));
+    for (const [id, key] of [["chips-gestures", "gestures"], ["chips-expression", "expression"], ["chips-gaze", "gaze"]]) updateChips(id, state[key], Boolean(busy.video) || refActive());
+    $("perf-hint").hidden = !refActive();
     updateChips("chips-camera", state.camera, Boolean(busy.video) || refActive());
     $("camera-hint").hidden = !refActive();
     $("ing-ref").hidden = state.refMode !== "performance";
@@ -2897,6 +2936,9 @@
     buildChips("chips-framing", FRAMINGS, "framing");
     buildChips("chips-format", FORMATS, "format");
     buildChips("chips-quality", QUALITIES, "quality");
+    buildChips("chips-gestures", GESTURES, "gestures");
+    buildChips("chips-expression", EXPRESSIONS, "expression");
+    buildChips("chips-gaze", GAZES, "gaze");
     buildChips("chips-camera", CAMERAS, "camera");
 
     for (const tab of document.querySelectorAll(".segmented button")) {
