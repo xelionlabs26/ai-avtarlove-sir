@@ -19,10 +19,14 @@
     isolate: "fal-ai/elevenlabs/audio-isolation",
     upscale: "fal-ai/topaz/upscale/video",
     mergeAudio: "fal-ai/ffmpeg-api/merge-audio-video",
+    videoRead: "openrouter/router/video",
+    extractFrame: "fal-ai/ffmpeg-api/extract-frame",
   };
 
   // Vision models that read the character sheet and the set, tried in order.
-  const VISION_MODELS = ["google/gemini-2.5-flash", "openai/gpt-4o-mini"];
+  const VISION_MODELS = ["google/gemini-3.7-flash", "google/gemini-3.6-flash", "google/gemini-2.5-flash", "openai/gpt-4o-mini"];
+  // Models that watch (and listen to) a finished clip for the clip check, tried in order.
+  const VIDEO_MODELS = ["google/gemini-3.7-flash", "google/gemini-3.6-flash", "google/gemini-2.5-flash"];
 
   // Image used as a camera-distance guide for generated sets (served next to this page).
   const REFERENCE_PATH = "reference/podcast-set-framing.jpg";
@@ -176,6 +180,23 @@
     lens: { label: "The camera", hint: "Talks to viewers" },
   };
 
+  // The clip check: what each finding is called, and the prompt line a retry adds to fix it.
+  const CLIP_CHECKS = {
+    eyes: { ok: "Eyes look natural", bad: "Eyes closed too often",
+      fix: (sp) => `${sp.His} eyes stay open for the whole clip, with only quick, natural blinks: never closed, never half-closed.` },
+    gaze: { ok: "Looks where you chose", bad: "Looks the wrong way",
+      fix: (sp) => (state.gaze === "lens" ? `${sp.He} looks straight into the lens for the whole clip.`
+        : `${sp.He} looks slightly to ${state.gaze === "right" ? "camera-right" : "camera-left"}, toward the host, for the whole clip and never into the lens.`) },
+    camera: { ok: "Camera matches your set", bad: "Camera moved or reframed",
+      fix: () => (refActive() ? "" : state.camera === "cuts" ? "Every shot comes from the same direction as @Image2, and the camera does not drift within a shot."
+        : "The camera is completely locked to the framing of @Image2 for the whole clip: no zoom, no reframing, no movement.") },
+    set: { ok: "Set unchanged", bad: "Set changed",
+      fix: () => "Every object in @Image2 stays exactly where it is, the microphone included: nothing is added, moved or removed, and the colours and light stay the same." },
+    people: { ok: "Only one person", bad: "Extra or changing person", fix: () => "Only this one person appears in the video, from the first frame to the last." },
+    text: { ok: "No text on screen", bad: "Text or logos on screen", fix: () => "No text, captions, subtitles, logos or watermarks appear anywhere." },
+    lipsync: { ok: "Lips follow the voice", bad: "Lips out of sync", fix: () => "The lips follow @Audio1 precisely, syllable by syllable." },
+  };
+
   const CAMERAS = {
     still: { label: "Still", hint: "One fixed angle" },
     cuts: { label: "Three cuts", hint: "Wide, medium, close" },
@@ -304,6 +325,8 @@
 
     preview: null, // { url, key, provider, at }: one still of the architect in the set, made on request
     previewGuide: true, // send an up-to-date preview to the video model as the first frame to match
+    autoCheck: true, // check each new clip on fal.ai (about a cent)
+    fixes: [], // CLIP_CHECKS keys added to the prompt by "Retry with fixes"
     ttsText: "",
     ttsVoice: null, // id from library/voices.json; null follows the Speaker choice
     ttsCustomVoice: "", // an ElevenLabs voice ID pasted by the user; used instead when set
@@ -326,6 +349,7 @@
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "record", "tts"].includes(state.voiceMode)) state.voiceMode = "upload";
+  state.fixes = Array.isArray(state.fixes) ? state.fixes.filter((k) => CLIP_CHECKS[k]) : [];
   if (!["library", "upload", "create"].includes(state.setMode)) state.setMode = "library";
   // The set library is new: show it first unless a set is already in use.
   if (!saved.setLibraryV) {
@@ -351,7 +375,7 @@
   if (saved.characterSource === "generated" && !("characterMode" in saved)) state.characterMode = "create";
   if (saved.backgroundSource === "generated" && !("setMode" in saved)) state.setMode = "create";
 
-  const busy = { character: null, background: null, ref: null, audio: null, video: null, preview: null, upscale: null }; // { text, since, stage }
+  const busy = { character: null, background: null, ref: null, audio: null, video: null, preview: null, upscale: null, check: null }; // { text, since, stage }
   const pending = { character: null, scene: null, transcript: null };
   const backend = { mode: "direct", models: DEFAULT_MODELS };
   let pendingKeyAction = null;
@@ -1161,7 +1185,9 @@
     const pGuide = previewGuide()
       ? `@Image${guideTag} is the approved first frame: match its composition and ${who}'s placement and pose in the chair. The camera, the set and the light still follow @Image2.`
       : null;
-    return [p1, p2, pGuide, p3, ref ? p4ref : p4, p5, shots.join("\n"), p7, p8].filter(Boolean).join("\n\n");
+    const fixLines = state.fixes.map((k) => CLIP_CHECKS[k].fix(sp)).filter(Boolean);
+    const pFix = fixLines.length ? `Most important in this take: ${fixLines.join(" ")}` : null;
+    return [p1, p2, pGuide, p3, ref ? p4ref : p4, p5, shots.join("\n"), p7, pFix, p8].filter(Boolean).join("\n\n");
   }
 
   // Prompt boxes: each is written automatically until the user chooses to edit it.
@@ -1183,11 +1209,11 @@
     try { return JSON.parse(m[0]); } catch { return null; }
   }
 
-  async function runVision(prompt, imageUrl) {
+  async function runVision(prompt, images) {
     let lastErr = null;
     for (const model of VISION_MODELS) {
       try {
-        const r = await runJob("vision", { model, prompt, image_urls: [imageUrl], temperature: 0.2, max_tokens: 500 }, null, 1200);
+        const r = await runJob("vision", { model, prompt, image_urls: Array.isArray(images) ? images : [images], temperature: 0.2, max_tokens: 500 }, null, 1200);
         const parsed = parseJsonLoose(r?.output);
         if (parsed) return parsed;
         lastErr = new Error("The image description could not be read.");
@@ -2393,6 +2419,7 @@
       setBusy("video", null);
       render();
       $("step-result").scrollIntoView({ behavior: "smooth", block: "start" });
+      if (state.autoCheck && falReady()) checkClip();
     } catch (err) {
       state.videoJob = null;
       save();
@@ -2400,6 +2427,91 @@
       setBusy("video", null);
       render();
     }
+  }
+
+  const finding = (x) => ({ ok: !(x?.ok === false || x?.ok === "false"), note: String(x?.note || "").trim().slice(0, 160) });
+
+  /** Watches and listens to the clip for eyes, gaze, camera, extra people, text and lip-sync. */
+  async function watchClip(r) {
+    const sp = SPEAKERS[state.speaker] || SPEAKERS.man;
+    const gaze = r.gaze === "lens" ? "looks straight into the camera" : `looks slightly to ${r.gaze === "right" ? "camera-right" : "camera-left"}, toward an off-camera host, and not into the lens`;
+    const camera = r.ref ? "follows the camera of a reference video, so camera moves and cuts are fine"
+      : r.camera === "cuts" ? "uses a few hard cuts between a wide, a medium and a close shot, and does not move otherwise" : "stays completely still: no cuts, no zoom, no pan";
+    const prompt = `Check this AI-generated podcast clip for problems. Watch the whole video and listen to it. Intended: one ${sp.noun} seated in a chair in a studio set, speaking; ` +
+      `the ${sp.noun} ${gaze}; the camera ${camera}; no on-screen text. Answer only with JSON in exactly this shape: ` +
+      `{"eyes":{"ok":true,"note":""},"gaze":{"ok":true,"note":""},"camera":{"ok":true,"note":""},"people":{"ok":true,"note":""},"text":{"ok":true,"note":""},"lipsync":{"ok":true,"note":""}}. ` +
+      `Set ok to false when: eyes, the eyes are closed or half-closed noticeably more than natural blinking (closed for longer than a blink, or very often); ` +
+      `gaze, the ${sp.noun} looks the wrong way for a noticeable time; camera, the camera does something other than intended; people, another person appears or the person changes; ` +
+      `text, any caption, subtitle, logo, watermark or text appears; lipsync, the mouth clearly does not match the speech. Each note: under 15 words, saying what and when in seconds, empty when ok.`;
+    let lastErr = null;
+    for (const model of VIDEO_MODELS) {
+      try {
+        const out = await runJob("videoRead", { model, prompt, video_urls: [r.url], temperature: 0.1, max_tokens: 600 }, null, 2000);
+        const parsed = parseJsonLoose(out?.output);
+        if (parsed) return parsed;
+        lastErr = new Error("The check came back unreadable.");
+      } catch (err) {
+        if (err.missingKey) throw err;
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("The clip could not be watched.");
+  }
+
+  /** Compares the clip's first frame with the approved set image, ignoring the person. */
+  async function compareToSet(r) {
+    if (!r.setUrl) return null;
+    const f = await runJob("extractFrame", { video_url: r.url, frame_type: "first" }, null, 1500);
+    const frame = f?.images?.[0]?.url || f?.image?.url || f?.frame?.url;
+    if (!frame) throw new Error("No frame came back.");
+    return runVision("Image 1 is the approved studio set. Image 2 is the first frame of a video made from it, with a person added in the chair. Compare them and ignore the person. " +
+      'Answer only with JSON: {"camera":{"ok":true,"note":""},"set":{"ok":true,"note":""}}. camera.ok is false if the camera position, angle, zoom or framing clearly differs. ' +
+      "set.ok is false if furniture, props or the microphone were moved, added or removed, or the colours or light clearly changed. Notes under 15 words, naming what changed, empty when ok.",
+    [r.setUrl, frame]);
+  }
+
+  /** Checks the finished clip on fal.ai (about a cent): automatically after each new clip, or on the button. */
+  async function checkClip() {
+    const r = state.result;
+    if (!r?.url || busy.check) return;
+    if (!falReady()) return setStatus("status-check", "Add a fal.ai key in the key panel to check clips. It costs about a cent a clip.", "error");
+    const url = r.url;
+    setStatus("status-check", "");
+    setBusy("check", "Checking the clip…");
+    render();
+    try {
+      const [watch, compare] = await Promise.allSettled([watchClip(r), compareToSet(r)]);
+      if (state.result?.url !== url) return;
+      const w = watch.status === "fulfilled" ? watch.value : null;
+      const c = compare.status === "fulfilled" ? compare.value : null;
+      if (!w && !c) throw watch.reason || compare.reason || new Error("The clip could not be read.");
+      const items = {};
+      for (const key of ["eyes", "gaze", "people", "text", "lipsync"]) if (w?.[key]) items[key] = finding(w[key]);
+      const cams = [w?.camera, r.ref ? null : c?.camera].filter(Boolean).map(finding);
+      if (cams.length) items.camera = { ok: cams.every((x) => x.ok), note: cams.filter((x) => !x.ok).map((x) => x.note).filter(Boolean).join(" ") };
+      if (c?.set) items.set = finding(c.set);
+      state.result = { ...state.result, check: { at: Date.now(), items } };
+      save();
+      const bad = Object.values(items).filter((x) => !x.ok).length;
+      setStatus("status-check", bad ? `${bad} thing${bad > 1 ? "s" : ""} to fix. Retry with fixes, or keep this take.` : "Everything looks right.", bad ? "error" : "ok");
+    } catch (err) {
+      setStatus("status-check", `The clip could not be checked. ${err.message}`, "error");
+    } finally {
+      setBusy("check", null);
+      render();
+    }
+  }
+
+  /** Makes a new take with a prompt line for each problem the check found. */
+  function retryWithFixes() {
+    const items = state.result?.check?.items || {};
+    const bad = Object.keys(items).filter((k) => !items[k].ok && CLIP_CHECKS[k]);
+    if (!bad.length) return;
+    state.fixes = [...new Set([...state.fixes, ...bad])];
+    save();
+    render();
+    createEpisode();
+    $("step-episode").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   /** How a take is upscaled: kie.ai doubles it (1, 2 or 4 only), fal.ai brings it to 1080p. Null at 1080p. */
@@ -2438,7 +2550,7 @@
         }
       }
       if (state.result?.url !== r.url) return;
-      state.result = { ...r, url, originalUrl: r.url, originalResolution: r.resolution, resolution: `${plan.target}, upscaled`, upscaled: true, check: null };
+      state.result = { ...state.result, url, originalUrl: r.url, originalResolution: r.resolution, resolution: `${plan.target}, upscaled`, upscaled: true };
       save();
       setStatus("status-upscale", voice ? "Upscaled, with your exact voice track." : "Upscaled. Play it once to check the sound.", "ok");
     } catch (err) {
@@ -2452,7 +2564,7 @@
   function useOriginalTake() {
     const r = state.result;
     if (!r?.originalUrl || busy.upscale) return;
-    state.result = { ...r, url: r.originalUrl, resolution: r.originalResolution, upscaled: false, originalUrl: null, originalResolution: null, check: null };
+    state.result = { ...r, url: r.originalUrl, resolution: r.originalResolution, upscaled: false, originalUrl: null, originalResolution: null };
     save();
     setStatus("status-upscale", "Back to the original take.", "ok");
     render();
@@ -3135,7 +3247,40 @@
         : "This is the upscaled take.";
       $("btn-original-take").hidden = !r.upscaled;
       $("btn-original-take").disabled = Boolean(busy.upscale);
+
+      const chk = r.check;
+      const list = $("check-list");
+      list.textContent = "";
+      for (const [key, item] of Object.entries(chk?.items || {})) {
+        if (!CLIP_CHECKS[key]) continue;
+        const li = document.createElement("li");
+        li.className = item.ok ? "is-ok" : "is-bad";
+        const b = document.createElement("b");
+        b.textContent = CLIP_CHECKS[key][item.ok ? "ok" : "bad"];
+        li.appendChild(b);
+        if (item.note && !item.ok) {
+          const small = document.createElement("small");
+          small.textContent = item.note;
+          li.appendChild(small);
+        }
+        list.appendChild(li);
+      }
+      list.hidden = !chk;
+      const anyBad = Boolean(chk && Object.values(chk.items).some((x) => !x.ok));
+      $("btn-retry-fixes").hidden = !anyBad;
+      $("btn-retry-fixes").disabled = Boolean(busy.video) || !ready;
+      const vcost = videoCost();
+      $("btn-retry-fixes").textContent = vcost ? `Retry with fixes (≈ ${fmtUsd(vcost.usd)})` : "Retry with fixes";
+      $("btn-check").textContent = busy.check ? "Checking…" : chk ? "Check again" : "Check this clip";
+      $("btn-check").disabled = Boolean(busy.check) || Boolean(busy.video) || Boolean(busy.upscale);
+      const cc = cost("check");
+      $("cost-check").textContent = falReady() ? `Uses ${cc ? fmtCost(cc) : "very little"} on fal.ai` : "Needs a fal.ai key (about a cent a clip)";
+      $("opt-autocheck").checked = state.autoCheck;
     }
+
+    // Fixes from the last check, carried into the prompt until cleared
+    $("fixes-row").hidden = !state.fixes.length;
+    $("fixes-text").textContent = state.fixes.length ? `Fixes in the prompt: ${state.fixes.map((k) => CLIP_CHECKS[k].bad.toLowerCase()).join(", ")}.` : "";
 
     // ---- Stepper ----
     renderStep("character",
@@ -3389,6 +3534,18 @@
     });
     $("btn-download").addEventListener("click", downloadResult);
     $("btn-upscale").addEventListener("click", upscaleClip);
+    $("btn-check").addEventListener("click", checkClip);
+    $("btn-retry-fixes").addEventListener("click", retryWithFixes);
+    $("btn-clear-fixes").addEventListener("click", () => {
+      state.fixes = [];
+      save();
+      render();
+    });
+    $("opt-autocheck").addEventListener("change", (e) => {
+      state.autoCheck = e.target.checked;
+      save();
+      render();
+    });
     $("btn-original-take").addEventListener("click", useOriginalTake);
     for (const name of Object.keys(PROMPT_BOXES)) bindPromptBox(name);
     $("btn-reread").addEventListener("click", () => {
@@ -3471,7 +3628,7 @@
     });
 
     window.addEventListener("beforeunload", (e) => {
-      if (busy.character || busy.background || busy.ref || busy.audio || busy.preview || busy.upscale || rec.recorder) {
+      if (busy.character || busy.background || busy.ref || busy.audio || busy.preview || busy.upscale || busy.check || rec.recorder) {
         e.preventDefault();
         e.returnValue = "";
       }

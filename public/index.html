@@ -543,6 +543,10 @@
             <div><dt>Format</dt><dd id="fact-format">–</dd></div>
           </dl>
           <button class="btn btn-primary btn-xl" id="btn-episode" type="button" disabled>Create episode clip</button>
+          <div class="fixes-row" id="fixes-row" hidden>
+            <p id="fixes-text"></p>
+            <button class="btn btn-small btn-quiet" id="btn-clear-fixes" type="button">Clear fixes</button>
+          </div>
           <p class="cost-line" id="cost-video"></p>
           <div class="confirm" id="confirm-video" role="alertdialog" aria-labelledby="confirm-video-text" hidden>
             <p id="confirm-video-text"></p>
@@ -606,6 +610,17 @@
             <p class="hint" id="upscale-hint"></p>
             <button class="btn btn-small btn-quiet" id="btn-original-take" type="button" hidden>Use the original take</button>
             <p class="status" id="status-upscale" role="status"></p>
+          </div>
+          <div class="clip-check" id="clip-check">
+            <span class="field-label">Clip check</span>
+            <ul class="check-list" id="check-list" hidden></ul>
+            <div class="actions">
+              <button class="btn btn-primary" id="btn-retry-fixes" type="button" hidden>Retry with fixes</button>
+              <button class="btn btn-small btn-quiet" id="btn-check" type="button">Check this clip</button>
+            </div>
+            <span class="cost" id="cost-check"></span>
+            <label class="check-row"><input type="checkbox" id="opt-autocheck" checked /> <span>Check every new clip automatically</span></label>
+            <p class="status" id="status-check" role="status"></p>
           </div>
         </div>
       </div>

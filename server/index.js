@@ -22,6 +22,8 @@ const MODELS = {
   isolate: process.env.ISOLATE_MODEL || "fal-ai/elevenlabs/audio-isolation",
   upscale: process.env.UPSCALE_MODEL || "fal-ai/topaz/upscale/video",
   mergeAudio: process.env.MERGE_AUDIO_MODEL || "fal-ai/ffmpeg-api/merge-audio-video",
+  videoRead: process.env.VIDEO_READ_ENDPOINT || "openrouter/router/video",
+  extractFrame: process.env.EXTRACT_FRAME_MODEL || "fal-ai/ffmpeg-api/extract-frame",
 };
 
 if (FAL_KEY) {
