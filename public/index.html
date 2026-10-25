@@ -524,6 +524,20 @@
             <div class="chips chips-3" id="chips-quality" role="radiogroup" aria-labelledby="lbl-quality"></div>
             <p class="hint">Try a new set-up at 480p first to save credits, then make the final clip at 720p or 1080p.</p>
           </div>
+          <div class="field shot-preview" id="shot-preview">
+            <span class="field-label">Shot preview</span>
+            <p class="hint">One still of the architect in your set, to check the look before spending video credits.</p>
+            <div class="preview-frame" id="preview-frame" hidden>
+              <a id="link-preview" href="#" target="_blank" rel="noopener"><img id="img-preview" alt="Shot preview: the architect seated in the set" /></a>
+            </div>
+            <div class="actions">
+              <button class="btn" id="btn-preview" type="button" disabled>Preview the shot</button>
+              <span class="cost" data-cost="image"></span>
+            </div>
+            <label class="check-row" id="row-preview-guide" hidden><input type="checkbox" id="opt-preview-guide" checked /> <span>Make the clip follow this preview</span></label>
+            <p class="hint" id="preview-note" hidden></p>
+            <p class="status" id="status-preview" role="status"></p>
+          </div>
           <dl class="clip-facts">
             <div><dt>Length</dt><dd id="fact-length">–</dd></div>
             <div><dt>Format</dt><dd id="fact-format">–</dd></div>

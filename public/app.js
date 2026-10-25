@@ -298,6 +298,9 @@
 
     voiceMode: "upload", // "upload" | "record" | "tts"
     levelVoice: true, // even out the loudness of uploads and recordings (free, in this browser)
+
+    preview: null, // { url, key, provider, at }: one still of the architect in the set, made on request
+    previewGuide: true, // send an up-to-date preview to the video model as the first frame to match
     ttsText: "",
     ttsVoice: null, // id from library/voices.json; null follows the Speaker choice
     ttsCustomVoice: "", // an ElevenLabs voice ID pasted by the user; used instead when set
@@ -345,7 +348,7 @@
   if (saved.characterSource === "generated" && !("characterMode" in saved)) state.characterMode = "create";
   if (saved.backgroundSource === "generated" && !("setMode" in saved)) state.setMode = "create";
 
-  const busy = { character: null, background: null, ref: null, audio: null, video: null }; // { text, since, stage }
+  const busy = { character: null, background: null, ref: null, audio: null, video: null, preview: null }; // { text, since, stage }
   const pending = { character: null, scene: null, transcript: null };
   const backend = { mode: "direct", models: DEFAULT_MODELS };
   let pendingKeyAction = null;
@@ -975,6 +978,62 @@
     return planCuts(D, transcriptReady() ? state.transcript.chunks : null);
   }
 
+  /** What a shot preview was made from: a new character, set or outfit makes it out of date. */
+  const previewKey = () => [state.characterUrl, state.backgroundUrl, outfitPlan().mode, sheetOutfit().id].join("|");
+
+  /**
+   * The preview, when it can guide the video: made from the current inputs, still hosted, and not with a verified
+   * portrait (the preview shows the sheet's face, which Seedance would refuse next to an asset).
+   */
+  function previewGuide() {
+    const pv = state.preview;
+    if (!state.previewGuide || !pv?.url || assetRef() || pv.key !== previewKey()) return null;
+    return Date.now() - pv.at > UPLOAD_TTL[pv.provider] ? null : pv.url;
+  }
+
+  /** One still of the architect seated in the set, in the chosen look, to check before the video. */
+  function previewPrompt() {
+    const sp = SPEAKERS[state.speaker] || SPEAKERS.man;
+    const who = sp.noun;
+    const plan = outfitPlan();
+    const looks = plan.mode === "override"
+      ? `Use only the face, hair and skin tone from the first image; the ${who} wears ${plan.image ? "the outfit from the third image: " : ""}${plan.outfit.prompt.replace(/[.\s]+$/, "")}.`
+      : `Use the face, hair and skin tone from the left side of the first image and the full outfit from its right side.`;
+    const gaze = state.gaze === "lens" ? "looking straight into the camera" : `looking slightly to ${state.gaze === "right" ? "camera-right" : "camera-left"}, toward a host just out of frame`;
+    const face = { serious: "a calm, focused expression", warm: "a calm expression with a light warmth", smiling: "a friendly smile" }[state.expression];
+    return `Edit the second image, a photograph of an empty podcast studio set: seat the ${who} from the first image in its chair as the podcast guest. ${looks} ` +
+      `Keep everything else in the second image exactly as it is: the same camera position, angle, lens and framing, the same furniture, props and microphone in the same places, and the same light and colours. ` +
+      `The ${who} sits back, relaxed and upright, with both forearms on the armrests, ${gaze}, mouth closed and eyes open, with ${face}. ` +
+      `Photorealistic, natural skin texture, realistic fabric. Only one person. No text.`;
+  }
+
+  async function createPreview() {
+    if (busy.preview || busy.video || !state.characterUrl || !state.backgroundUrl) return;
+    if (!ensureKey(createPreview)) return;
+    setStatus("status-preview", "");
+    setBusy("preview", "Making the shot preview…");
+    render();
+    try {
+      const plan = outfitPlan();
+      const key = previewKey();
+      const images = [state.characterUrl, await freshBackgroundUrl()];
+      if (plan.mode === "override" && plan.image) images.push(await libraryUpload(plan.image));
+      const r = await runJob("imageEdit", {
+        prompt: previewPrompt(), image_urls: images, aspect_ratio: state.backgroundAspect || FORMATS[state.format].aspect, resolution: "1K",
+      }, null, 2000);
+      const url = r?.images?.[0]?.url;
+      if (!url) throw new Error("No image came back. Please try again.");
+      state.preview = { url, key, provider: state.provider, at: Date.now() };
+      save();
+      setStatus("status-preview", "Here is the shot. If it looks right, create the clip; it will follow this preview.", "ok");
+    } catch (err) {
+      setStatus("status-preview", `The preview could not be made. ${err.message}`, "error");
+    } finally {
+      setBusy("preview", null);
+      render();
+    }
+  }
+
   /** Writes the Seedance prompt in the house template, filled from the inputs and fitted to the recording. */
   function composeVideoPrompt() {
     const ch = assetRef() ? { ...characterDetails(), layout: "photo" } : characterDetails();
@@ -1094,7 +1153,11 @@
     }
 
     const p8 = `Audio includes only the original audio from @Audio1${ref ? ", nothing from @Video1" : ""}. No background music, no sound effects, no added ambience, no subtitles, no on-screen text.`;
-    return [p1, p2, p3, ref ? p4ref : p4, p5, shots.join("\n"), p7, p8].join("\n\n");
+    const guideTag = 3 + (plan.mode === "override" && plan.image ? 1 : 0);
+    const pGuide = previewGuide()
+      ? `@Image${guideTag} is the approved first frame: match its composition and ${who}'s placement and pose in the chair. The camera, the set and the light still follow @Image2.`
+      : null;
+    return [p1, p2, pGuide, p3, ref ? p4ref : p4, p5, shots.join("\n"), p7, p8].filter(Boolean).join("\n\n");
   }
 
   // Prompt boxes: each is written automatically until the user chooses to edit it.
@@ -2267,6 +2330,8 @@
         renderProgress();
         images.push(await libraryUpload(plan.image));
       }
+      const guide = previewGuide();
+      if (guide) images.push(guide);
       // The rights box can be unticked while the prompt is being finished.
       if (state.refMode === "performance" && !refActive()) {
         throw userError("Add the reference clip in step 3 (and tick the rights box), or switch the reference off.");
@@ -2940,7 +3005,25 @@
       state.refMode === "performance" && !refActive() && "reference clip (or switch it off)",
       !a && "voice recording",
     ].filter(Boolean);
-    const otherBusy = busy.character || busy.background || busy.ref || busy.audio;
+    const otherBusy = busy.character || busy.background || busy.ref || busy.audio || busy.preview;
+
+    // Shot preview
+    const pv = state.preview;
+    const canPreview = Boolean(state.characterUrl && state.backgroundUrl);
+    const freshPreview = Boolean(pv && pv.key === previewKey());
+    $("preview-frame").hidden = !pv;
+    if (pv && $("img-preview").getAttribute("src") !== pv.url) $("img-preview").src = pv.url;
+    if (pv) $("link-preview").href = pv.url;
+    $("preview-frame").classList.toggle("is-stale", Boolean(pv && !freshPreview));
+    $("btn-preview").disabled = !canPreview || Boolean(busy.preview) || Boolean(busy.video);
+    $("btn-preview").textContent = busy.preview ? "Making the preview…" : pv ? "Make a new preview" : "Preview the shot";
+    $("preview-note").textContent = !canPreview
+      ? state.backgroundUrl && assetRef() ? "The preview needs a character sheet image as well as the asset ID." : "Add the character sheet and the set first."
+      : pv && !freshPreview ? "The character, set or outfit changed since this preview. Make a new one to use it as a guide."
+        : pv && assetRef() ? "With a verified portrait, the preview is only for looking: it is not sent with the clip." : "";
+    $("preview-note").hidden = !$("preview-note").textContent;
+    $("row-preview-guide").hidden = !freshPreview || Boolean(assetRef());
+    $("opt-preview-guide").checked = state.previewGuide;
     const ready = missing.length === 0;
     $("btn-episode").disabled = !ready || Boolean(busy.video) || Boolean(otherBusy);
     $("btn-episode").textContent = state.result ? "Create a new clip" : "Create episode clip";
@@ -3215,6 +3298,12 @@
     // Step 5: episode
     $("btn-episode").addEventListener("click", () => createEpisode());
     $("btn-confirm-video").addEventListener("click", () => createEpisode({ confirmed: true }));
+    $("btn-preview").addEventListener("click", createPreview);
+    $("opt-preview-guide").addEventListener("change", (e) => {
+      state.previewGuide = e.target.checked;
+      save();
+      render();
+    });
     $("btn-cancel-video").addEventListener("click", () => {
       confirmVideo = false;
       render();
@@ -3305,7 +3394,7 @@
     });
 
     window.addEventListener("beforeunload", (e) => {
-      if (busy.character || busy.background || busy.ref || busy.audio || rec.recorder) {
+      if (busy.character || busy.background || busy.ref || busy.audio || busy.preview || rec.recorder) {
         e.preventDefault();
         e.returnValue = "";
       }
