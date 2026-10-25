@@ -46,12 +46,6 @@
   };
 
   // Light wording for the video prompt's look paragraph.
-  const LIGHT_LOOKS = {
-    day: "soft, warm natural daylight from a window on the left, gentle shadows",
-    soft: "soft, even, slightly cool studio light from the front, gentle shadows",
-    warm: "warm cinematic lighting with amber and chocolate-brown tones, soft shadows",
-    moody: "low-key cinematic lighting from warm practical lamps, deep soft shadows",
-  };
 
   const SET_STYLES = {
     studio: {
@@ -943,7 +937,12 @@
 
     // 2. Where: the set.
     const sceneText = trim(sc.scene || [sc.setting, sc.seat, sc.microphone ? "a black podcast microphone on a boom-arm stand" : null, sc.lighting].filter(Boolean).join(", "));
-    const p2 = `@Image2 defines the scene${sceneText ? `: ${sceneText}` : ""}. Keep the scene layout, furniture and lighting exactly as in @Image2.`;
+    // The set image is the finished set the user approved: the video keeps it, and in the still camera its framing too.
+    const ref = refActive();
+    const keepCamera = !ref && state.camera !== "cuts";
+    const p2 = `@Image2 defines the scene${sceneText ? `: ${sceneText}` : ""}. Keep @Image2 exactly as it is: ` +
+      `${keepCamera ? "the same camera position, angle, lens and framing, " : ""}the same furniture, props and microphone in the same places, and the same colours and lighting. ` +
+      `Do not add, remove or move anything in the set.`;
 
     // 3. The voice.
     const p3 = `@Audio1 defines only the audio: ${who}'s voice and complete dialogue${lang ? ` in ${lang}` : ""}. ` +
@@ -953,24 +952,24 @@
     // 4. Performance, modelled on a calm, seated podcast answer.
     const seatName = sc.seat ? `the ${trim(sc.seat).replace(/^(a|an|the)\s+/i, "").replace(/\s+in the (centre|center).*$/i, "")}` : "the chair";
     const mic = sc.microphone !== false;
-    const p4 = `${Who} sits back in ${seatName} from @Image2, relaxed and upright, legs apart and feet flat on the floor, ` +
-      `body turned a little toward ${mic ? `the microphone, which hangs close to ${sp.his} mouth without covering ${sp.his} lips` : "the side"}. ` +
-      `Both forearms rest on the armrests. The hand on the far side stays relaxed on the armrest near ${sp.his} knee; ` +
-      `the hand on the ${mic ? "microphone " : ""}side now and then lifts off the armrest into an open-palm gesture toward the host, then settles back. ` +
+    const eyes = `${sp.His} eyes stay open, alert and engaged, with only a quick, natural blink every few seconds: ` +
+      `never closed for longer than a blink, never half-closed, never squinting.`;
+    const p4 = `${Who} sits back in ${seatName} from @Image2, relaxed and upright, legs apart and feet flat on the floor, body turned a little toward the host. ` +
+      `${mic ? `The microphone stays exactly where it is in @Image2 and never covers ${sp.his} mouth. ` : ""}` +
+      `Both forearms rest on the armrests. One hand stays relaxed on the armrest near ${sp.his} knee; ` +
+      `the other now and then lifts off the armrest into an open-palm gesture toward the host, then settles back. ` +
       `${Who} speaks in a calm, warm, conversational tone, as if answering a host sitting just off-frame to camera-left. ` +
-      `${sp.His} eyes and face stay turned slightly to camera-left, toward the microphone side, for the whole clip and never look into the lens. ` +
+      `${sp.His} eyes and face stay turned slightly to camera-left, toward that host, for the whole clip and never look into the lens. ` +
       `${sp.His} mouth shapes every word clearly in sync with @Audio1. On key words ${sp.his} eyebrows lift and ${sp.his} head turns or tilts slightly; ` +
-      `between phrases ${who} pauses with ${sp.his} mouth closed, blinks naturally and sometimes briefly closes ${sp.his} eyes in thought. ` +
+      `between phrases ${who} pauses briefly with ${sp.his} mouth closed. ${eyes} ` +
       `Movements stay small and natural: no big gestures, no exaggerated smiling.`;
 
     // A reference video replaces the house performance and camera with the clip's own.
-    const ref = refActive();
     const p4ref = `${Who} sits in ${seatName} from @Image2 and copies the body movement, posture, gestures, head turns, facial expressions and pacing of the person in @Video1, ` +
-      `while lip-syncing precisely to @Audio1. Use @Video1 only for movement, timing and camera: do not use its person, face, body shape, clothing, background, text or audio.`;
+      `while lip-syncing precisely to @Audio1. Use @Video1 only for movement, timing and camera: do not use its person, face, body shape, clothing, background, text or audio. ${eyes}`;
 
     // 5. Look.
-    const lightLook = (sc.light && LIGHT_LOOKS[sc.light]) || (sc.lighting ? `${trim(sc.lighting)}, soft shadows` : LIGHT_LOOKS.warm);
-    const p5 = `The visuals feature ${lightLook}, natural skin texture, realistic fabric texture on the outfit, and a photorealistic authentic UGC creator look.`;
+    const p5 = `The lighting, colours and depth of field match @Image2 exactly, with natural skin texture, realistic fabric texture on the outfit, and a photorealistic authentic UGC creator look.`;
 
     // 6. Camera: one fixed angle, or cuts fitted to the recording.
     let shots;
@@ -980,27 +979,27 @@
       p7 = `${Who}'s face, outfit, lighting and scene stay identical throughout.`;
     } else if (state.camera !== "cuts") {
       shots = [
-        `Camera: one continuous shot from a locked-off tripod camera at seated chest height, straight on, in the same direction as @Image2: a seated full-body shot with ${who} filling the frame from just above the head down to the shoes, both armrests of the chair visible at the sides, the microphone on its boom arm at the upper left, and the set softly behind. ` +
-        `The camera never moves: no cuts, no zoom, no pan, no tilt, no shake. Only ${who} moves.`,
+        `Camera: one continuous locked-off shot with exactly the camera position, height, angle, lens and framing of @Image2, as if ${who} has sat down in the scene of @Image2. ` +
+        `The camera never moves: no cuts, no zoom, no crop, no reframing, no pan, no tilt, no shake. Only ${who} moves.`,
       ];
-      p7 = `${Who}'s face, outfit, lighting and scene stay identical throughout.`;
+      p7 = `${Who}'s face, outfit, the framing, the lighting and every object in the set stay identical throughout.`;
     } else if (points.length === 3) {
       const [, a, D] = points;
       shots = [
         `Use two hard cuts:`,
-        `[0–${a}s] Medium-wide shot, eye-level, straight-on: ${who} seated in the chair, with the set softly behind.`,
+        `[0–${a}s] The exact framing of @Image2, same camera position, angle and lens, with ${who} seated in the chair.`,
         `[${a}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, ending on a calm, assured expression.`,
       ];
-      p7 = `${Who}'s face, outfit, lighting and scene stay identical across both cuts.`;
+      p7 = `${Who}'s face, outfit, lighting and every object in the set stay identical across both cuts.`;
     } else {
       const [, a, b, D] = points;
       shots = [
         `Use three hard cuts:`,
-        `[0–${a}s] Wide full shot, eye-level, straight-on: full body visible seated in the chair, with the floor, the furniture and the whole set in frame.`,
-        `[${a}–${b}s] Hard cut to a medium close-up from mid-torso up, slightly angled from the side, eye-level to slightly low angle${mic ? ", with the microphone and boom arm prominent in the foreground" : ""}.`,
+        `[0–${a}s] The exact framing of @Image2, same camera position, angle and lens, with ${who} seated in the chair.`,
+        `[${a}–${b}s] Hard cut to a medium close-up from mid-torso up, from the same direction as @Image2, eye-level${mic ? ", with the microphone where it stands in @Image2" : ""}.`,
         `[${b}–${D}s] Hard jump cut to an extreme close-up of ${sp.his} face from just above the eyebrows to the chin, direct eye-level, ending on a calm, assured expression.`,
       ];
-      p7 = `${Who}'s face, outfit, lighting and scene stay identical across all three cuts.`;
+      p7 = `${Who}'s face, outfit, lighting and every object in the set stay identical across all three cuts.`;
     }
 
     const p8 = `Audio includes only the original audio from @Audio1${ref ? ", nothing from @Video1" : ""}. No background music, no sound effects, no added ambience, no subtitles, no on-screen text.`;
