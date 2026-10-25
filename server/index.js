@@ -20,6 +20,8 @@ const MODELS = {
   tts: process.env.TTS_MODEL || "fal-ai/elevenlabs/tts/multilingual-v2",
   ttsExpressive: process.env.TTS_EXPRESSIVE_MODEL || "fal-ai/elevenlabs/tts/eleven-v3",
   isolate: process.env.ISOLATE_MODEL || "fal-ai/elevenlabs/audio-isolation",
+  upscale: process.env.UPSCALE_MODEL || "fal-ai/topaz/upscale/video",
+  mergeAudio: process.env.MERGE_AUDIO_MODEL || "fal-ai/ffmpeg-api/merge-audio-video",
 };
 
 if (FAL_KEY) {

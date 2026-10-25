@@ -599,6 +599,14 @@
           <button class="btn" id="btn-retake" type="button">Create another take</button>
           <a class="btn btn-quiet" id="link-open" target="_blank" rel="noopener" href="#">Open in a new tab</a>
           <p class="hint">Another take uses the same inputs and prompt and gives a new variation, at the cost shown in step 5.</p>
+          <div class="upscale-box" id="upscale-box" hidden>
+            <span class="field-label">Sharper version</span>
+            <button class="btn" id="btn-upscale" type="button">Upscale this take</button>
+            <span class="cost" id="cost-upscale"></span>
+            <p class="hint" id="upscale-hint"></p>
+            <button class="btn btn-small btn-quiet" id="btn-original-take" type="button" hidden>Use the original take</button>
+            <p class="status" id="status-upscale" role="status"></p>
+          </div>
         </div>
       </div>
     </section>

@@ -17,6 +17,8 @@
     tts: "fal-ai/elevenlabs/tts/multilingual-v2",
     ttsExpressive: "fal-ai/elevenlabs/tts/eleven-v3",
     isolate: "fal-ai/elevenlabs/audio-isolation",
+    upscale: "fal-ai/topaz/upscale/video",
+    mergeAudio: "fal-ai/ffmpeg-api/merge-audio-video",
   };
 
   // Vision models that read the character sheet and the set, tried in order.
@@ -241,10 +243,11 @@
     image: "nano-banana-pro", imageEdit: "nano-banana-pro", video: "bytedance/seedance-2-5",
     tts: "elevenlabs/text-to-speech-multilingual-v2", ttsExpressive: "elevenlabs/text-to-dialogue-v3",
     isolate: "elevenlabs/audio-isolation",
+    upscale: "topaz/video-upscale",
   };
   // Jobs that run on the provider the user picked. The rest (reading images, transcription,
   // audio conversion) are optional helpers that only run with fal.ai credentials.
-  const PROVIDER_KINDS = new Set(["image", "imageEdit", "video", "tts", "ttsExpressive", "isolate"]);
+  const PROVIDER_KINDS = new Set(["image", "imageEdit", "video", "tts", "ttsExpressive", "isolate", "upscale"]);
   const PROVIDERS = { kie: "kie.ai", fal: "fal.ai" };
   // Prices for the estimates, from library/pricing.json (kie.ai in credits, fal.ai in US dollars). This copy is the fallback.
   const FALLBACK_PRICING = {"asOf": "2026-10-25", "usdPerKieCredit": 0.005, "confirmAboveUsd": 3, "kie": {"unit": "credits", "video": {"480p": 28, "720p": 63, "1080p": 158}, "videoWithReference": {"480p": 17, "720p": 38, "1080p": 95}, "image": 18, "speechPer1000Chars": 12, "upscalePerSecond": 8, "noiseRemovalPerMinute": null}, "fal": {"unit": "usd", "video": {"480p": 0.2205, "720p": 0.473, "1080p": 1.164}, "videoReferenceFactor": 0.6, "image": 0.15, "speechPer1000Chars": 0.1, "upscalePerSecond": 0.02, "noiseRemovalPerMinute": 0.12, "clipCheck": 0.01}};
@@ -348,7 +351,7 @@
   if (saved.characterSource === "generated" && !("characterMode" in saved)) state.characterMode = "create";
   if (saved.backgroundSource === "generated" && !("setMode" in saved)) state.setMode = "create";
 
-  const busy = { character: null, background: null, ref: null, audio: null, video: null, preview: null }; // { text, since, stage }
+  const busy = { character: null, background: null, ref: null, audio: null, video: null, preview: null, upscale: null }; // { text, since, stage }
   const pending = { character: null, scene: null, transcript: null };
   const backend = { mode: "direct", models: DEFAULT_MODELS };
   let pendingKeyAction = null;
@@ -513,6 +516,7 @@
   /** Converts the app's request (fal.ai field names) into a kie.ai createTask input. */
   function kieInput(kind, input) {
     if (kind === "isolate") return { audio_url: input.audio_url };
+    if (kind === "upscale") return { video_url: input.video_url, upscale_factor: String(input.upscale_factor) };
     if (kind === "tts" || kind === "ttsExpressive") {
       const voice = input.voice;
       return kind === "tts" ? { text: input.text, voice, timestamps: true } : { dialogue: [{ text: input.text, voice }], stability: 0.5 };
@@ -556,7 +560,7 @@
     try { out = JSON.parse(d.resultJson || "{}") || {}; } catch { /* malformed */ }
     const urls = Array.isArray(out.resultUrls) ? out.resultUrls : [];
     if (!urls.length) throw Object.assign(new Error("kie.ai finished the task without a file."), { status: 400 });
-    const result = job.kind === "video"
+    const result = job.kind === "video" || job.kind === "upscale"
       ? { video: { url: urls[0] } }
       : job.kind === "tts" || job.kind === "ttsExpressive" || job.kind === "isolate"
         ? { audio: { url: urls[0] }, timestamps: out.timestamps || out.alignment || null }
@@ -2349,7 +2353,10 @@
       setBusy("video", "Sending to the video model…", "queue");
       renderProgress();
       const job = await submitJob("video", input);
-      state.videoJob = { ...job, startedAt: Date.now(), meta: { aspect, resolution: state.quality, duration: D, provider: state.provider } };
+      state.videoJob = {
+        ...job, startedAt: Date.now(),
+        meta: { aspect, resolution: state.quality, duration: D, provider: state.provider, audioUrl: state.audio.url, setUrl: images[1], gaze: state.gaze, camera: state.camera, ref },
+      };
       save();
     } catch (err) {
       setStatus("status-video", friendlyVideoError(err), "error");
@@ -2393,6 +2400,62 @@
       setBusy("video", null);
       render();
     }
+  }
+
+  /** How a take is upscaled: kie.ai doubles it (1, 2 or 4 only), fal.ai brings it to 1080p. Null at 1080p. */
+  function upscalePlan(r) {
+    const short = { "480p": 480, "720p": 720 }[r?.resolution];
+    if (!short) return null;
+    if (state.provider === "kie") return { factor: 2, target: `${short * 2}p` };
+    return { factor: Math.min(4, Math.round((1080 / short) * 100) / 100), target: "1080p" };
+  }
+
+  /**
+   * Upscales the finished take, so a 480p test that came out right keeps its exact performance (Seedance cannot repeat
+   * a take). With a fal.ai key, the original voice track is then put back onto the upscaled video.
+   */
+  async function upscaleClip() {
+    const r = state.result;
+    const plan = upscalePlan(r);
+    if (!plan || busy.upscale || busy.video) return;
+    if (!ensureKey(upscaleClip)) return;
+    setStatus("status-upscale", "");
+    setBusy("upscale", `Upscaling on ${PROVIDERS[state.provider]}…`);
+    render();
+    try {
+      const input = useKie("upscale") ? { video_url: r.url, upscale_factor: plan.factor } : { video_url: r.url, upscale_factor: plan.factor, H264_output: true };
+      let url = (await runJob("upscale", input, null, 4000))?.video?.url;
+      if (!url) throw new Error("No video came back. Please try again.");
+      let voice = false;
+      if (falReady() && r.audioUrl) {
+        setBusy("upscale", "Putting your voice track back…");
+        render();
+        try {
+          const m = await runJob("mergeAudio", { video_url: url, audio_url: r.audioUrl }, null, 2000);
+          if (m?.video?.url) { url = m.video.url; voice = true; }
+        } catch (err) {
+          console.warn("The voice track could not be put back:", err);
+        }
+      }
+      if (state.result?.url !== r.url) return;
+      state.result = { ...r, url, originalUrl: r.url, originalResolution: r.resolution, resolution: `${plan.target}, upscaled`, upscaled: true, check: null };
+      save();
+      setStatus("status-upscale", voice ? "Upscaled, with your exact voice track." : "Upscaled. Play it once to check the sound.", "ok");
+    } catch (err) {
+      setStatus("status-upscale", `The take could not be upscaled. ${err.message}`, "error");
+    } finally {
+      setBusy("upscale", null);
+      render();
+    }
+  }
+
+  function useOriginalTake() {
+    const r = state.result;
+    if (!r?.originalUrl || busy.upscale) return;
+    state.result = { ...r, url: r.originalUrl, resolution: r.originalResolution, upscaled: false, originalUrl: null, originalResolution: null, check: null };
+    save();
+    setStatus("status-upscale", "Back to the original take.", "ok");
+    render();
   }
 
   async function downloadResult() {
@@ -2798,7 +2861,7 @@
 
   function render() {
     renderKeyPill();
-    for (const el of document.querySelectorAll(".cost")) el.textContent = usesText(cost(el.dataset.cost || "image"));
+    for (const el of document.querySelectorAll(".cost[data-cost]")) el.textContent = usesText(cost(el.dataset.cost));
     $("asset-row").hidden = state.provider !== "kie";
 
     // ---- Step 1: architect ----
@@ -3059,7 +3122,19 @@
       if (v.getAttribute("src") !== r.url) v.src = r.url;
       $("link-open").href = r.url;
       $("result-meta").textContent = [r.duration ? `${r.duration} seconds` : null, ASPECTS[r.aspect] || r.aspect, r.resolution].filter(Boolean).join(" · ");
-      $("btn-retake").disabled = Boolean(busy.video) || !ready;
+      $("btn-retake").disabled = Boolean(busy.video) || Boolean(busy.upscale) || !ready;
+      const up = upscalePlan(r);
+      $("upscale-box").hidden = !up && !r.upscaled;
+      $("btn-upscale").hidden = !up;
+      $("btn-upscale").disabled = Boolean(busy.upscale) || Boolean(busy.video);
+      $("btn-upscale").textContent = busy.upscale ? busy.upscale.text : up ? `Upscale this take to ${up.target}` : "";
+      $("cost-upscale").textContent = up ? usesText(cost("upscale", { seconds: r.duration || 0 })) : "";
+      $("cost-upscale").hidden = !up;
+      $("upscale-hint").textContent = up
+        ? "Keeps this exact performance. Remaking at a higher quality gives a new take, because Seedance cannot repeat a take."
+        : "This is the upscaled take.";
+      $("btn-original-take").hidden = !r.upscaled;
+      $("btn-original-take").disabled = Boolean(busy.upscale);
     }
 
     // ---- Stepper ----
@@ -3313,6 +3388,8 @@
       $("step-episode").scrollIntoView({ behavior: "smooth", block: "start" });
     });
     $("btn-download").addEventListener("click", downloadResult);
+    $("btn-upscale").addEventListener("click", upscaleClip);
+    $("btn-original-take").addEventListener("click", useOriginalTake);
     for (const name of Object.keys(PROMPT_BOXES)) bindPromptBox(name);
     $("btn-reread").addEventListener("click", () => {
       if (!ensureKey(() => refreshAnalyses(true))) return;
@@ -3394,7 +3471,7 @@
     });
 
     window.addEventListener("beforeunload", (e) => {
-      if (busy.character || busy.background || busy.ref || busy.audio || busy.preview || rec.recorder) {
+      if (busy.character || busy.background || busy.ref || busy.audio || busy.preview || busy.upscale || rec.recorder) {
         e.preventDefault();
         e.returnValue = "";
       }
