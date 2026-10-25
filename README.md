@@ -88,13 +88,14 @@ Step 4 has three ways to add the voice:
 - **Upload MP4:** a video or an audio-only MP4, 2 to 30 seconds.
 - **Record now:** records with the microphone of the phone or computer. A timer and a level bar show it is
   working, recording stops by itself at 30 seconds, and silence at the start and the end is cut off.
-- **Type the words:** an ElevenLabs voice speaks the typed text. It runs on the provider you picked, with the key you
-  already added (kie.ai or fal.ai), so no ElevenLabs account or key is needed. Choose one of 13 standard voices (the
-  default follows the Speaker choice) and a style: **Natural** (Multilingual v2, also returns the timing of every word,
-  so the camera cuts land on pauses) or **Expressive** (Eleven v3, livelier). The app estimates the length as you type
-  and stops a text that cannot fit 30 seconds before any credits are used. These are ElevenLabs' standard voices, not
-  the architect's own: for that, use **Record now**. A script read from a reference clip in step 3 can be sent here
-  with **Use for the voice**.
+- **Type the words:** an Indian ElevenLabs voice speaks the typed text, in English, Hindi or a mix. It runs on the
+  provider you picked, with the key you already added (kie.ai or fal.ai), so no ElevenLabs account or key is needed.
+  The voices come from `public/library/voices.json` (male and female; the default follows the Speaker choice), and any
+  other ElevenLabs voice ID can be pasted in instead. Pick a style: **Natural** (Multilingual v2, also returns the
+  timing of every word, so the camera cuts land on pauses) or **Expressive** (Eleven v3, livelier). The app estimates
+  the length as you type and stops a text that cannot fit 30 seconds before any credits are used. For the architect's
+  own voice, use **Record now**. A script read from a reference clip in step 3 can be sent here with
+  **Use for the voice**.
 
 Whichever way it comes in, the video model receives the voice as audio (`audio_urls`, `@Audio1`), not as a video. The
 browser decodes it and uploads a mono WAV, which works for audio-only MP4s and for any video codec. If a browser cannot

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "voices": [
+    { "id": "niraj", "name": "Niraj", "voiceId": "zgqefOY5FPQ3bB7OZTVR", "gender": "male", "hint": "Hindi and English, calm narrator", "default": true },
+    { "id": "jeet", "name": "Jeet", "voiceId": "3Th96YoTP1kEKxJroYo1", "gender": "male", "hint": "Hindi and English, confident" },
+    { "id": "aman", "name": "Aman", "voiceId": "Jtq0XvWJ2hTXgWeKOCEP", "gender": "male", "hint": "Hindi and English, warm" },
+    { "id": "sourabh", "name": "Sourabh", "voiceId": "trxRCYtDC6qFREKq6Ek2", "gender": "male", "hint": "Hindi and English, energetic" },
+    { "id": "bunty", "name": "Bunty", "voiceId": "7qBNUtXRGP0jPi0H4r8k", "gender": "male", "hint": "Hindi and English, friendly" },
+    { "id": "indian-hindi-female", "name": "Indian Hindi voice", "voiceId": "2F1KINpxsttim2WfMbVs", "gender": "female", "hint": "Hindi and English, clear", "default": true },
+    { "id": "tarini", "name": "Tarini", "voiceId": "kiaJRdXJzloFWi6AtFBf", "gender": "female", "hint": "Hindi and English, warm" },
+    { "id": "devi", "name": "Devi", "voiceId": "MF4J4IDTRo0AxOO4dpFR", "gender": "female", "hint": "Hindi and English, soft" }
+  ]
+}

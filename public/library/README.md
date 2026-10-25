@@ -4,6 +4,7 @@ The app reads two files from this folder when it starts:
 
 - `outfits.json` lists the outfits shown in step 1.
 - `sets.json` lists the preset backgrounds shown in step 2.
+- `voices.json` lists the voices for "Type the words" in step 4.
 
 To add an entry, add its image to the right folder, add a block to the JSON file, then commit and push. The site
 updates about a minute later. If a file is missing or has a mistake, the app still works: the outfit list falls back to
@@ -77,3 +78,21 @@ ghost mannequin or laid flat. Do not use photos that show a real person's face.
 
 Set images: no people, no text or captions, no watermarks. The talking-head framing works best: the chair in the lower
 half, slightly right of centre, the mic on a boom arm from the left, the room behind.
+
+## Voices (`voices.json`)
+
+```json
+{ "id": "niraj", "name": "Niraj", "voiceId": "zgqefOY5FPQ3bB7OZTVR", "gender": "male", "hint": "Hindi and English, calm narrator", "default": true }
+```
+
+| Field | Required | What it does |
+| --- | --- | --- |
+| `id` | Yes | Unique name for the app. |
+| `name` | Yes | Shown in the voice list. |
+| `voiceId` | Yes | The ElevenLabs voice ID (letters and numbers). Open a voice in the ElevenLabs voice library and copy its ID. |
+| `gender` | No | `male` or `female`. Groups the list; a woman speaker gets a female voice by default. |
+| `hint` | No | Short description after the name. |
+| `default` | No | `true` on one male and one female voice: used when no voice is chosen. |
+
+The starting list was taken from public voice listings and has not been tried on kie.ai or fal.ai yet. If a voice is
+refused, replace its `voiceId` with one from the ElevenLabs voice library (filter by Hindi), or remove the entry.

@@ -408,13 +408,18 @@
           <div class="panel" id="panel-voice-tts" role="tabpanel" aria-labelledby="tab-voice-tts" hidden>
             <div class="field">
               <label class="field-label" for="tts-text">What should the architect say?</label>
-              <textarea class="text-input tts-text" id="tts-text" rows="5" maxlength="1500" placeholder="Good buildings start by listening to the site. We walk it at dawn and at dusk before we draw a single line."></textarea>
+              <textarea class="text-input tts-text" id="tts-text" rows="5" maxlength="1500" placeholder="Type in English, Hindi (हिंदी) or a mix: Har achhi building site ko samajhne se shuru hoti hai."></textarea>
               <p class="hint" id="tts-estimate"></p>
             </div>
             <div class="field">
               <label class="field-label" for="tts-voice">Voice</label>
               <select class="text-input" id="tts-voice"></select>
-              <p class="hint" id="tts-voice-hint">ElevenLabs voices, made with your kie.ai or fal.ai key. For the architect's own voice, use Record now.</p>
+              <p class="hint" id="tts-voice-hint">Indian voices that speak Hindi and English, made with your kie.ai or fal.ai key. For the architect's own voice, use Record now.</p>
+            </div>
+            <div class="field">
+              <label class="field-label" for="tts-custom-voice">Or paste an ElevenLabs voice ID (optional)</label>
+              <input class="text-input mono" id="tts-custom-voice" type="text" autocomplete="off" spellcheck="false" placeholder="For example zgqefOY5FPQ3bB7OZTVR" />
+              <p class="hint">Find more Indian voices in the <a href="https://elevenlabs.io/voice-library" target="_blank" rel="noopener">ElevenLabs voice library</a> (filter by Hindi), copy a voice's ID and paste it here. It is used instead of the list.</p>
             </div>
             <div class="field">
               <span class="field-label" id="lbl-tts-model">Speech style</span>

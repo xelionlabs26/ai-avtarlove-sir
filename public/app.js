@@ -147,24 +147,13 @@
     multilingual: { label: "Natural", hint: "Multilingual v2", kind: "tts" },
     v3: { label: "Expressive", hint: "Eleven v3", kind: "ttsExpressive" },
   };
-  // ElevenLabs' standard voices: fal.ai takes the name, kie.ai the voice ID.
-  const TTS_VOICES = {
-    george: { name: "George", id: "JBFqnCBsd6RMkjVDRZzb", group: "male", hint: "British, warm" },
-    daniel: { name: "Daniel", id: "onwK4e9ZLuTAKqWW03F9", group: "male", hint: "British, steady" },
-    brian: { name: "Brian", id: "nPczCjzI2devNBz1zQrb", group: "male", hint: "American, deep" },
-    eric: { name: "Eric", id: "cjVigY5qzO86Huf0OWal", group: "male", hint: "American, friendly" },
-    roger: { name: "Roger", id: "CwhRBWXzGAHq8TQ4Fs17", group: "male", hint: "American, confident" },
-    chris: { name: "Chris", id: "iP95p4xoKVk53GoZ742B", group: "male", hint: "American, casual" },
-    will: { name: "Will", id: "bIHbv24MWmeRgasZH58o", group: "male", hint: "American, young" },
-    lily: { name: "Lily", id: "pFZP5JQG7iQjIQuC4Bku", group: "female", hint: "British, warm" },
-    alice: { name: "Alice", id: "Xb7hH8MSUJpSbSDYk0k2", group: "female", hint: "British, clear" },
-    sarah: { name: "Sarah", id: "EXAVITQu4vr4xnSDxMaL", group: "female", hint: "American, soft" },
-    matilda: { name: "Matilda", id: "XrExE9yKIg1WjnnlVkGX", group: "female", hint: "American, friendly" },
-    laura: { name: "Laura", id: "FGY2WhTYpPnrIDTdsKH5", group: "female", hint: "American, bright" },
-    river: { name: "River", id: "SAz9YHcvj6GT2YYXdXww", group: "neutral", hint: "American, calm" },
-  };
-  const TTS_VOICE_GROUPS = { male: "Male voices", female: "Female voices", neutral: "Neutral voice" };
-  const TTS_DEFAULT_VOICE = { man: "george", woman: "lily", person: "river" };
+  // Indian ElevenLabs voices for Hindi and English, from library/voices.json (this list is the fallback).
+  const FALLBACK_VOICES = [
+    { id: "niraj", name: "Niraj", voiceId: "zgqefOY5FPQ3bB7OZTVR", gender: "male", hint: "Hindi and English, calm narrator", default: true },
+    { id: "indian-hindi-female", name: "Indian Hindi voice", voiceId: "2F1KINpxsttim2WfMbVs", gender: "female", hint: "Hindi and English, clear", default: true },
+  ];
+  const TTS_VOICE_GROUPS = { male: "Male voices", female: "Female voices" };
+  const VOICE_ID = /^[A-Za-z0-9]{15,40}$/;
   const TTS_WORDS_PER_SEC = 2.6; // a calm speaking pace, for the length estimate
 
   // Seedance 2.5 limits for reference videos. A clip used only for its script is never sent to Seedance, so only its
@@ -294,7 +283,8 @@
 
     voiceMode: "upload", // "upload" | "record" | "tts"
     ttsText: "",
-    ttsVoice: null, // key of TTS_VOICES; null follows the Speaker choice
+    ttsVoice: null, // id from library/voices.json; null follows the Speaker choice
+    ttsCustomVoice: "", // an ElevenLabs voice ID pasted by the user; used instead when set
     ttsModel: "multilingual",
 
     provider: "kie", // "kie" | "fal"
@@ -311,7 +301,6 @@
   for (const [k, opts] of enums) if (!opts[state[k]]) state[k] = DEFAULTS[k];
   if (!["upload", "create"].includes(state.characterMode)) state.characterMode = "upload";
   if (!["upload", "record", "tts"].includes(state.voiceMode)) state.voiceMode = "upload";
-  if (!TTS_VOICES[state.ttsVoice]) state.ttsVoice = null;
   if (!["library", "upload", "create"].includes(state.setMode)) state.setMode = "library";
   // The set library is new: show it first unless a set is already in use.
   if (!saved.setLibraryV) {
@@ -346,7 +335,7 @@
   const rec = { recorder: null, stream: null, started: 0, timer: null, meter: null }; // the recording in progress
 
   // The library: outfits and preset sets, loaded from library/*.json at start-up.
-  const library = { outfits: [FALLBACK_OUTFIT], sets: [], loaded: false };
+  const library = { outfits: [FALLBACK_OUTFIT], sets: [], voices: FALLBACK_VOICES, loaded: false };
 
   function loadState() {
     try { return JSON.parse(localStorage.getItem(STATE_KEY) || "{}") || {}; } catch { return {}; }
@@ -501,7 +490,7 @@
   /** Converts the app's request (fal.ai field names) into a kie.ai createTask input. */
   function kieInput(kind, input) {
     if (kind === "tts" || kind === "ttsExpressive") {
-      const voice = Object.values(TTS_VOICES).find((v) => v.name === input.voice)?.id || input.voice;
+      const voice = input.voice;
       return kind === "tts" ? { text: input.text, voice, timestamps: true } : { dialogue: [{ text: input.text, voice }], stability: 0.5 };
     }
     if (kind === "video") {
@@ -642,6 +631,18 @@
   const libraryPath = (p) => (typeof p === "string" && p ? (/^https?:\/\//i.test(p) ? p : LIBRARY_ROOT + p.replace(/^\/+/, "")) : null);
   const str = (v, max = 600) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
 
+  function sanitizeVoices(list) {
+    if (!Array.isArray(list)) return null;
+    const out = [];
+    for (const x of list) {
+      const id = str(x?.id, 80);
+      const voiceId = str(x?.voiceId, 60);
+      if (!id || !voiceId || !VOICE_ID.test(voiceId) || out.some((y) => y.id === id)) continue;
+      out.push({ id, voiceId, name: str(x.name, 60) || id, gender: x.gender === "female" ? "female" : "male", hint: str(x.hint, 80) || "", default: x.default === true });
+    }
+    return out.length ? out : null;
+  }
+
   function sanitizeOutfits(list) {
     if (!Array.isArray(list)) return null;
     const seen = new Set();
@@ -703,9 +704,11 @@
         return null;
       }
     };
-    const [o, sets] = await Promise.all([get("outfits.json"), get("sets.json")]);
+    const [o, sets, v] = await Promise.all([get("outfits.json"), get("sets.json"), get("voices.json")]);
     library.outfits = sanitizeOutfits(o?.outfits) || [FALLBACK_OUTFIT];
     library.sets = sanitizeSets(sets?.sets);
+    library.voices = sanitizeVoices(v?.voices) || FALLBACK_VOICES;
+    if (state.ttsVoice && !library.voices.some((x) => x.id === state.ttsVoice)) state.ttsVoice = null;
     library.loaded = true;
     if (state.outfitId && !outfitById(state.outfitId)) state.outfitId = null;
     state.look = sheetOutfit().id;
@@ -1879,7 +1882,18 @@
     return words / TTS_WORDS_PER_SEC + stops * 0.3;
   }
 
-  const ttsVoiceKey = () => state.ttsVoice || TTS_DEFAULT_VOICE[state.speaker] || "george";
+  /** The library voice in use: the chosen one, or the default for the Speaker (a woman gets a female voice). */
+  function ttsLibraryVoice() {
+    const list = library.voices;
+    const chosen = list.find((v) => v.id === state.ttsVoice);
+    if (chosen) return chosen;
+    const gender = state.speaker === "woman" ? "female" : "male";
+    const same = list.filter((v) => v.gender === gender);
+    return same.find((v) => v.default) || same[0] || list[0];
+  }
+  const customVoiceId = () => (VOICE_ID.test((state.ttsCustomVoice || "").trim()) ? state.ttsCustomVoice.trim() : null);
+  /** { name, voiceId } to speak with: a pasted voice ID wins over the list. */
+  const ttsVoice = () => (customVoiceId() ? { name: "Your ElevenLabs voice", voiceId: customVoiceId() } : ttsLibraryVoice());
 
   /** Speaks the typed words with an ElevenLabs voice on the chosen provider (uses its credits, only on the button). */
   async function createSpeech() {
@@ -1890,13 +1904,16 @@
     if (est > MAX_AUDIO) return setStatus("status-voice", `This text takes about ${Math.round(est)} seconds to say. One clip is at most ${MAX_AUDIO} seconds, so please shorten it.`, "error");
     if (est < MIN_AUDIO) return setStatus("status-voice", `This text takes only about ${est.toFixed(1)} seconds to say. A clip needs at least ${MIN_AUDIO} seconds, so add a few words.`, "error");
     if (!ensureKey(createSpeech)) return;
-    const voice = TTS_VOICES[ttsVoiceKey()];
+    if ((state.ttsCustomVoice || "").trim() && !customVoiceId()) {
+      return setStatus("status-voice", "That voice ID does not look right. Copy the ID from the voice in ElevenLabs (letters and numbers only), or clear the box.", "error");
+    }
+    const voice = ttsVoice();
     const kind = (TTS_MODELS[state.ttsModel] || TTS_MODELS.multilingual).kind;
     setStatus("status-voice", "");
     setBusy("audio", `Creating the voice on ${PROVIDERS[state.provider]}…`);
     render();
     try {
-      const r = await runJob(kind, { text, voice: voice.name, timestamps: true }, null, 1500);
+      const r = await runJob(kind, { text, voice: voice.voiceId, timestamps: true }, null, 1500);
       const url = r?.audio?.url || (typeof r?.audio === "string" ? r.audio : null);
       if (!url) throw new Error("No audio came back. Please try again.");
       const chunks = timingChunks(r?.timestamps);
@@ -2437,16 +2454,24 @@
     $("tts-estimate").classList.toggle("is-warn", long || short);
 
     const sel = $("tts-voice");
-    if (!sel.options.length) {
+    const listKey = library.voices.map((v) => v.id).join(",");
+    if (sel.dataset.key !== listKey) {
+      sel.dataset.key = listKey;
+      sel.innerHTML = "";
       for (const [group, label] of Object.entries(TTS_VOICE_GROUPS)) {
+        const voicesInGroup = library.voices.filter((v) => v.gender === group);
+        if (!voicesInGroup.length) continue;
         const og = document.createElement("optgroup");
         og.label = label;
-        for (const [key, v] of Object.entries(TTS_VOICES)) if (v.group === group) og.appendChild(new Option(`${v.name} · ${v.hint}`, key));
+        for (const v of voicesInGroup) og.appendChild(new Option(v.hint ? `${v.name} · ${v.hint}` : v.name, v.id));
         sel.appendChild(og);
       }
     }
-    if (sel.value !== ttsVoiceKey()) sel.value = ttsVoiceKey();
-    sel.disabled = Boolean(busy.audio);
+    const libVoice = ttsLibraryVoice();
+    if (libVoice && sel.value !== libVoice.id) sel.value = libVoice.id;
+    const custom = $("tts-custom-voice");
+    if (document.activeElement !== custom && custom.value !== state.ttsCustomVoice) custom.value = state.ttsCustomVoice;
+    sel.disabled = Boolean(busy.audio) || Boolean(customVoiceId());
     $("tts-credits").textContent = `Uses ${PROVIDERS[state.provider]} credits, with the key you already added. Nothing is created until you press Create voice.`;
     updateChips("chips-tts-model", state.ttsModel, Boolean(busy.audio));
     $("btn-tts").disabled = Boolean(busy.audio) || Boolean(rec.recorder) || !text;
@@ -2980,8 +3005,13 @@
       save();
       renderTts();
     });
+    $("tts-custom-voice").addEventListener("input", (e) => {
+      state.ttsCustomVoice = e.target.value.trim();
+      save();
+      renderTts();
+    });
     $("tts-voice").addEventListener("change", (e) => {
-      if (!TTS_VOICES[e.target.value]) return;
+      if (!library.voices.some((v) => v.id === e.target.value)) return;
       state.ttsVoice = e.target.value;
       save();
       render();
