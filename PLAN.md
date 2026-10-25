@@ -31,6 +31,12 @@ backgrounds (see [What you add next](#what-you-add-next)).
 - **Voice, step 4:** besides uploading an MP4, the voice can be recorded in the app (microphone, stops at 30 seconds,
   silence trimmed) or typed and spoken by a standard ElevenLabs voice. The speech runs on kie.ai or fal.ai with the
   key already added, and only when **Create voice** is pressed.
+- **Voice clean-up:** even loudness in the browser for uploads and recordings, and background noise removal.
+- **Cost estimates:** every Create button shows its price; clips above $3 ask for a second press (`pricing.json`).
+- **Performance controls:** gestures, expression and gaze, written into the prompt.
+- **Shot preview:** one still of the architect in the set before the video, which can guide the clip.
+- **Test at 480p, then upscale:** upscale the take you like instead of remaking it.
+- **Clip check:** each new clip is checked on fal.ai, with **Retry with fixes**.
 
 ## Starting point (before Phase 0)
 

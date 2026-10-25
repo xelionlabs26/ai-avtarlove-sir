@@ -14,9 +14,29 @@ spent when the user asks.
 | 2. Studio set | A preset from the set library, or your own set image (its shape sets the clip format) | From style, chair, light, framing, format and optional notes, or **Add chair and mic** to a library room | Uses the preset's description, or reads the seat, props and light from the set |
 | 3. Reference video (optional) | A clip to copy its performance, or to take its script | – | Checks the clip against the video model's limits. For a script, takes out the sound and reads the words |
 | 4. Voice | An MP4, 2 to 30 seconds, or a recording made in the app | Typed words spoken by an ElevenLabs voice, on kie.ai or fal.ai | Makes a clean audio track, measures it, and finds natural pauses for the camera cuts |
-| 5. Episode clip | – | **Create episode clip** | Writes the video prompt, sets the clip length to the recording, and places the camera cuts on pauses or follows the reference clip's camera |
+| 5. Episode clip | – | **Preview the shot** (one image), then **Create episode clip** | Writes the video prompt with your performance choices, sets the clip length to the recording, places the camera cuts on pauses, and shows the cost before you create |
+| Result | – | **Upscale this take**, **Retry with fixes** | Checks the finished clip for closed eyes, a moved camera or set, extra people, text and lip-sync |
 
 All three prompts (character sheet, studio set, video) are written automatically and can be opened and edited.
+
+### Costs before you create
+
+Every Create button says what it costs on your provider, for example "Uses about 18 credits (≈ $0.09) on kie.ai". The
+Quality buttons show the price of this clip at 480p, 720p and 1080p, and a clip estimated above $3 asks for a second
+press. The prices live in `public/library/pricing.json` and can be updated there.
+
+### Performance, preview and the finished clip
+
+- **Performance (step 5):** Gestures (Calm, Natural, Expressive), Expression (Serious, Warm, Smiling) and Looks at
+  (the host on the left or right, or the camera). They rewrite the performance part of the prompt.
+- **Shot preview (step 5):** one still of the architect sitting in your set (about $0.09 on kie.ai), to check the look
+  before spending video credits. While it matches the current inputs, the clip follows it as the approved first frame.
+- **Test at 480p, then upscale:** Seedance cannot repeat a take, so a 480p test that came out right is upscaled rather
+  than remade (kie.ai doubles it, fal.ai brings it to 1080p). With a fal.ai key, the exact voice track is put back
+  onto the upscaled video.
+- **Clip check:** with a fal.ai key, each new clip is watched by a video model and its first frame is compared with
+  your set (about a cent). Problems are listed with a note, and **Retry with fixes** makes a new take with a prompt
+  line for each problem.
 
 ### Outfit library
 
@@ -86,6 +106,8 @@ Every field is explained in [public/library/README.md](public/library/README.md)
 Step 4 has three ways to add the voice:
 
 - **Upload MP4:** a video or an audio-only MP4, 2 to 30 seconds.
+- **Clean-up:** uploads and recordings are brought to an even loudness in the browser (free, can be switched off), and
+  **Remove background noise** cleans a recording with ElevenLabs audio isolation, with **Use the original** to undo.
 - **Record now:** records with the microphone of the phone or computer. A timer and a level bar show it is
   working, recording stops by itself at 30 seconds, and silence at the start and the end is cut off.
 - **Type the words:** an Indian ElevenLabs voice speaks the typed text, in English, Hindi or a mix. It runs on the
@@ -112,6 +134,9 @@ Pick the provider in the key panel (top right). The images and the Seedance 2.5 
 | Video | `bytedance/seedance-2-5` | `bytedance/seedance-2.5/reference-to-video` |
 | Typed words, Natural | `elevenlabs/text-to-speech-multilingual-v2` | `fal-ai/elevenlabs/tts/multilingual-v2` |
 | Typed words, Expressive | `elevenlabs/text-to-dialogue-v3` | `fal-ai/elevenlabs/tts/eleven-v3` |
+| Shot preview | `nano-banana-pro` (with `image_input`, 1K) | `fal-ai/nano-banana-pro/edit` |
+| Remove background noise | `elevenlabs/audio-isolation` | `fal-ai/elevenlabs/audio-isolation` |
+| Upscale a take | `topaz/video-upscale` | `fal-ai/topaz/upscale/video` |
 
 kie.ai calls go straight from the browser: uploads to `kieai.redpandaai.co/api/file-stream-upload`, jobs to
 `api.kie.ai/api/v1/jobs/createTask`, and status from `api.kie.ai/api/v1/jobs/recordInfo`. kie.ai keeps uploaded files
@@ -120,8 +145,10 @@ for a limited time, so finish a clip in one session.
 A fal.ai key is optional with kie.ai. When present, it is used for extra helpers that kie.ai does not provide:
 reading the sheet and the set (`openrouter/router/vision`), transcribing the recording to place cuts on pauses and
 reading a reference clip's script (`fal-ai/whisper`), and converting audio a browser cannot decode
-(`fal-ai/ffmpeg-api/merge-audios`). Without it, the prompt uses the preset descriptions, the cuts are spaced evenly,
-and **Use the script** is not available.
+(`fal-ai/ffmpeg-api/merge-audios`), checking finished clips (`openrouter/router/video` and
+`fal-ai/ffmpeg-api/extract-frame`), and putting the voice back after an upscale (`fal-ai/ffmpeg-api/merge-audio-video`).
+Without it, the prompt uses the preset descriptions, the cuts are spaced evenly, and **Use the script** and the clip
+check are not available.
 
 The files reach the video model in a fixed order, so the prompt tags always line up. A tag is in the prompt only when
 its file is sent.
@@ -131,6 +158,7 @@ its file is sent.
 | `@Image1` | Character sheet, or verified portrait | Always |
 | `@Image2` | Studio set | Always |
 | `@Image3` | Outfit image | Only when a library outfit replaces the clothes on the sheet |
+| next `@Image` | Shot preview | Only when an up-to-date preview guides the clip (`@Image3`, or `@Image4` after an outfit image) |
 | `@Video1` | Reference clip | Only when copying a performance |
 | `@Audio1` | The voice | Always |
 
